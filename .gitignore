@@ -1,0 +1,24 @@
+# --- firmware build artifacts ---
+*.o
+*.elf
+*.bin
+*.hex
+*.lst
+*.map
+firmware/main_ext.bin
+
+# PlatformIO
+.pio/
+firmware/.pio/
+
+# ch32fun brought in for building (symlink/copy; not vendored)
+firmware/ch32fun/
+
+# scratch / stray
+Souce/
+**/新しいテキスト ドキュメント.txt
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.swp

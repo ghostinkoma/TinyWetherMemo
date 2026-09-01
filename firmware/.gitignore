@@ -1,0 +1,12 @@
+# build artifacts
+*.o
+*.elf
+*.bin
+*.hex
+*.lst
+*.map
+main_ext.bin
+# PlatformIO
+.pio/
+# ch32fun source brought in for PlatformIO (symlink or copy; not vendored)
+/ch32fun

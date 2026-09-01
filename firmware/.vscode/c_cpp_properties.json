@@ -1,0 +1,47 @@
+//
+// !!! WARNING !!! AUTO-GENERATED FILE!
+// PLEASE DO NOT MODIFY IT AND USE "platformio.ini":
+// https://docs.platformio.org/page/projectconf/section_env_build.html#build-flags
+//
+{
+    "configurations": [
+        {
+            "name": "PlatformIO",
+            "includePath": [
+                "d:/hobby/ThunderSence/firmware/ch32fun",
+                "d:/hobby/ThunderSence/firmware",
+                ""
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "path": [
+                    "d:/hobby/ThunderSence/firmware/ch32fun",
+                    "d:/hobby/ThunderSence/firmware",
+                    ""
+                ]
+            },
+            "defines": [
+                "TARGET_MCU=CH32V003",
+                "MCU_PACKAGE=1",
+                "TARGET_MCU_LD=0",
+                "PLATFORMIO=60119",
+                "CH32V003J4",
+                "CH32V00X",
+                "CH32V003",
+                "FUNCONF_USE_DEBUGPRINTF=1",
+                ""
+            ],
+            "cStandard": "gnu99",
+            "cppStandard": "gnu++17",
+            "compilerPath": "C:/Users/sinhex/.platformio/packages/toolchain-riscv/bin/riscv-none-embed-gcc.exe",
+            "compilerArgs": [
+                "-msmall-data-limit=0",
+                "-msave-restore",
+                "-march=rv32ecxw",
+                "-mabi=ilp32e",
+                ""
+            ]
+        }
+    ],
+    "version": 4
+}
