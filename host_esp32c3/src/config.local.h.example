@@ -1,0 +1,14 @@
+// ============================================================================
+//  config.local.h.example  -  個人設定オーバーライドのテンプレート
+//
+//  使い方: このファイルを同ディレクトリに config.local.h としてコピーし、
+//          自分の WiFi 資格情報などを記入する。config.local.h は .gitignore
+//          済みなので公開リポジトリには含まれない。config.h から自動 include。
+// ============================================================================
+#pragma once
+
+#define WLB_WIFI_SSID  "YOUR_WIFI_SSID"
+#define WLB_WIFI_PASS  "YOUR_WIFI_PASS"
+
+// 設定用 SoftAP のパスワード (WPA2, 8文字以上)。任意で上書き。
+// #define WLB_AP_PASS    "your-ap-pass"

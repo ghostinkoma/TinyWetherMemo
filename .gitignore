@@ -22,3 +22,12 @@ Souce/
 Thumbs.db
 .DS_Store
 *.swp
+
+# --- secrets (公開しない。テンプレは *.example / *_sample.h を追跡) ---
+# 実 WiFi 資格情報など
+host_esp32c3/src/config.local.h
+# デバイス固有 TLS 秘密鍵 (tools/gen_cert.ps1 で生成)
+host_esp32c3/src/cert_pem.h
+# ログイン認証ハッシュ (デバイス実行時生成) / 実行時設定
+**/auth.ini
+**/settings.ini

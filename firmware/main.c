@@ -132,6 +132,9 @@ int main(void)
         if ((uint32_t)(now - last_health) >= 1000u) {   /* ~1 Hz health sample */
             last_health = now;
             i2c_slave_set_health(adc_vdd_mv(), adc_read(8));
+            extern volatile uint32_t g_i2c_addr_hits, g_i2c_resets;   /* diag */
+            DBG("[i2c] addrHits=%lu resets=%lu\n",
+                (unsigned long)g_i2c_addr_hits, (unsigned long)g_i2c_resets);
         }
 
         i2c_slave_set_state(health_state());

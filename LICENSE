@@ -1,35 +1,81 @@
-MIT License
+TinyWetherMemo (ThunderSense bridge + WetherLoggerBox host) — Custom Non-Commercial License
+Copyright (c) 2026 ghostinkoma <ghostinkoma@gmail.com>
+Source repository: https://github.com/ghostinkoma/TinyWetherMemo
 
-Copyright (c) 2026 ThunderSense contributors
+================================================================================
+ 日本語（原文。以下の日本語条項が正文とし、英訳は参考）
+================================================================================
+本ソフトウェア（ソースコード・ドキュメント・回路/機構データ等を含む一切。以下「本作」）
+の利用・複製・改変・再配布を、次の条件のもと **非商用目的に限り** 無償で許諾します。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. 非商用限定
+   商用利用を禁じます。ここでいう商用利用とは、本作またはその派生物の販売・有償頒布、
+   営利を目的とする製品・サービスへの組み込みや提供、その他直接・間接に営利を得る目的での
+   利用をいいます。商用利用を希望する場合は、作者 <ghostinkoma@gmail.com> に個別の許諾を
+   求めてください。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. 帰属の明示（配布・公開・フォーク時の義務）
+   本作またはその派生物を配布・公開・フォークする場合、配布物または派生リポジトリの
+   目立つ場所（README 等）に、必ず次の両方を明記しなければなりません。
+     ・作者の連絡先: ghostinkoma@gmail.com
+     ・本リポジトリの URL: https://github.com/ghostinkoma/TinyWetherMemo
+   あわせて本ライセンス全文を同梱してください。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. 無保証・免責
+   本作は「現状有姿（AS IS）」で提供され、明示・黙示を問わず、商品性・特定目的適合性・
+   非侵害を含むいかなる保証もありません。作者は、本作の利用または利用不能から生じる
+   いかなる直接的・間接的・付随的・結果的損害についても一切の責任を負いません。
+   利用者は自己の責任において本作を使用するものとします。本作は雷・気象等の安全に関わる
+   用途の正確性・可用性を保証しません。人命・財産に関わる判断に用いてはなりません。
 
---------------------------------------------------------------------------------
-Third-party notices
---------------------------------------------------------------------------------
-This project's own source is MIT-licensed (above). It references / builds on:
+================================================================================
+ English (convenience translation; the Japanese text above governs)
+================================================================================
+This software and all accompanying materials (source code, documentation,
+circuit/mechanical data, etc.; the "Work") are licensed free of charge for
+NON-COMMERCIAL purposes only, under the following conditions.
 
-* ch32fun (https://github.com/cnlohr/ch32fun) - MIT. Not vendored in this repo;
+1. Non-Commercial Only
+   Commercial use is prohibited. "Commercial use" means selling or distributing
+   the Work or derivatives for a fee, incorporating them into or providing them
+   as part of any for-profit product or service, or any other use intended to
+   obtain commercial advantage, directly or indirectly. For commercial use,
+   obtain separate permission from the author <ghostinkoma@gmail.com>.
+
+2. Attribution (required on any distribution, publication, or fork)
+   Any distribution, publication, or fork of the Work or a derivative MUST state
+   BOTH of the following in a prominent place (e.g. the README) of the
+   distributed materials or the derivative repository:
+     - Author contact: ghostinkoma@gmail.com
+     - This repository URL: https://github.com/ghostinkoma/TinyWetherMemo
+   The full text of this license must also be included.
+
+3. No Warranty / No Liability
+   THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY, FITNESS FOR A
+   PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE
+   LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN
+   CONNECTION WITH THE WORK OR ITS USE. Use is entirely at your own risk. The
+   Work makes no guarantee of accuracy or availability for lightning, weather,
+   or any safety-related purpose and must not be relied upon for decisions
+   affecting life or property.
+
+NOTE: This is a source-available, non-commercial license. It is NOT an
+OSI-approved open-source license (the non-commercial restriction is
+incompatible with the Open Source Definition).
+
+================================================================================
+ Third-party notices
+================================================================================
+The author's own source is licensed as above. This project references / builds
+on the following, which retain their own licenses (this Non-Commercial License
+does not relicense them):
+
+* ch32fun (https://github.com/cnlohr/ch32fun) — MIT. NOT vendored in this repo;
   provide it at build time (see firmware/BUILD.md).
-* FreqCounter by Martin Nawrath (KHM LAB3) - LGPL. Its AVR code is NOT included
+* FreqCounter by Martin Nawrath (KHM LAB3) — LGPL. Its AVR code is NOT included
   or ported; only the LCO calibration *procedure and target values* were reused
   (see firmware/as3935.c).
-* AE_AS3935DEMO/ contains Akizuki Denshi Tsusho demo material for the AE-AS3935
-  module, included for reference only; its redistribution terms are those of the
-  original distributor.
+* AE-AS3935 module demo material by Akizuki Denshi Tsusho was used for reference
+  only during development and is NOT redistributed in this repository; obtain it
+  from the original distributor (https://akizukidenshi.com/) under their terms.

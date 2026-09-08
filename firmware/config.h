@@ -55,6 +55,8 @@
 #define AS3935_TUN_CAP       0x00   /* TODO: bench-calibrated TUN_CAP (method A, §10) */
 
 /* ---------------- System ---------------- */
+/* 既定 48MHz(実機稼働値)。softclock/swi2c/HW-I2CスレーブFREQ は本値から自動算出。
+ * 省電力24MHz化(保留)時は funconfig.h と合わせ本値も 24000000u にする。 */
 #define SYS_CLK_HZ            48000000u  /* HSI 48 MHz (no external crystal)             */
 
 /* ---------------- Debug console ----------------

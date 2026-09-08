@@ -1,0 +1,11 @@
+# WetherLoggerBox 4MB ESP32-C3: single app (no OTA) + large LittleFS + coredump
+# Sized from build result: app binary ~1.17MB -> factory 0x160000 (1.375MB, ~15% headroom).
+# A 1MB app is infeasible (binary exceeds it). FS maximized to 0x280000 (2.5MB) while
+# keeping a 64KB coredump for WDT/panic post-mortem. (app~1.4M / FS~2.5M)
+# Changing offsets reformats LittleFS on next boot (datalog_begin formats on mount-fail).
+# Name,     Type, SubType,  Offset,   Size
+nvs,        data, nvs,      0x9000,   0x5000,
+phy_init,   data, phy,      0xe000,   0x1000,
+factory,    app,  factory,  0x10000,  0x160000,
+spiffs,     data, spiffs,   0x170000, 0x280000,
+coredump,   data, coredump, 0x3F0000, 0x10000,

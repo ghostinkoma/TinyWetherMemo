@@ -1,4 +1,4 @@
-# ThunderSense
+# TinyWetherMemo
 
 **AS3935 雷センサ → CH32V003 → I2C ブリッジ** と、上位ホスト（ESP32）用ライブラリ。
 
@@ -46,7 +46,7 @@
 ## リポジトリ構成
 
 ```
-ThunderSence/
+TinyWetherMemo/
 ├─ README.md                 # 本書
 ├─ TESTLOG.md                # 実機テスト結果（簡易ログ）
 ├─ LICENSE
@@ -55,14 +55,32 @@ ThunderSence/
 │   ├─ SPEC.md                # 詳細仕様
 │   ├─ I2C_REFERENCE.md       # I2C コマンド仕様
 │   └─ SOP8PinOut.txt
-├─ firmware/                 # CH32V003 ファーム（ch32fun / PlatformIO）
+├─ firmware/                 # CH32V003 ファーム（ch32fun / PlatformIO）  ★PIOプロジェクト
 │   ├─ *.c / *.h              # モジュール（config/protocol/capture/bundle/...）
 │   ├─ Makefile / platformio.ini / funconfig.h / BUILD.md
-├─ arduino/ThunderSense/     # ESP32 ホストライブラリ
-│   ├─ ThunderSense.h / .cpp  # ← .h を読めば使い方が分かる
-│   └─ examples/ReadLightning/
-└─ AE_AS3935DEMO/            # 秋月デモ(参考・三者資料)
+├─ host_esp32c3/             # ESP32-C3 ホストアプリ「WetherLoggerBox」  ★PIOプロジェクト
+│   ├─ platformio.ini         # env:esp32c3  (pio run / pio run -t upload)
+│   ├─ src/                   # main / io_task(RTOS) / sensors / lightning / wifi / oled
+│   ├─ lib/ThunderSense/      # 本リポジトリ arduino/ 版ホストライブラリを同梱
+│   └─ Docs/                  # ARCHITECTURE / SENSORS / LIGHTNING
+└─ arduino/ThunderSense/     # ESP32 ホストライブラリ（配布用の元）
+    ├─ ThunderSense.h / .cpp  # ← .h を読めば使い方が分かる
+    └─ examples/ReadLightning/
 ```
+> 秋月 AE-AS3935 のデモ資料は開発時の参考のみで、本リポジトリには再配布しません（[LICENSE](LICENSE) 三者表記）。
+
+> **2 つの PlatformIO プロジェクト**が同居: `firmware/`（CH32V003 ブリッジ, `platform=ch32v`）と
+> `host_esp32c3/`（ESP32-C3 ロガー, `platform=pioarduino`）。各フォルダで `pio run` / `pio run -t upload`。
+
+### ホストアプリ WetherLoggerBox の主機能（詳細 → [host_esp32c3/README.md](host_esp32c3/README.md)）
+- **RTOS**: ioTask が I2C 単独所有（雷+センサ+校正）、loopTask が WiFi/Web/FS。`g_state`(mutex) で受渡し。
+- **6ページ Web SPA**（ダッシュボード/チャート/WiFi/雷校正/オフセット/データ）。gzip 配信・自己スケジュールポーリング。
+- **チャート**: ライブ/分足/時間足/日/週/月（**Chart.js ローカル同梱=CDN非依存**）。時足以降は FS 長期履歴。
+- **認証**: ログイン(SHA-256+RNG, Cookie) + パスワード変更、SoftAP WPA2、設定パスワード AES 暗号化。
+- **HTTPS(443) 併設**（自己署名 EC P-256）+ HTTP(80)。httpd 移植。
+- **データ**: LittleFS へ CSV(`time,temp,humi,thunder`, NTP時刻/オフライン救済) + 時足を FS 永続化。int16 圧縮。
+- **信頼性/省電力**: タスクWDT、メッシュ BSSID ロック+再ローミング、RTC 時刻保持、WiFiモデムスリープ + CPU 80MHz。
+- パーティション: 4MB を app 1.375MB / FS(LittleFS) 2.5MB / coredump 64KB。
 
 ---
 
@@ -128,10 +146,19 @@ void loop(){
 - ビルド：Makefile / PlatformIO とも SUCCESS（**FLASH 55% / RAM 66%**、triple/32＋全機能、DEBUG=0）
 - SW-I2C 通信確立、AS3935 応答（アドレス **0x00**、reg0x00=0x24）
 - LCO 校正成功（**TUN_CAP=4**）→ option-byte 保存 → 次回起動でロード（高速起動）
-- **スパーク試験**：電子ライターで **disturber を 81件検出**（雷ではなく妨害波と正しく分類）
+- **スパーク試験**：電子ライターで **disturber を検出**（雷ではなく妨害波と正しく分類）
 - IWDG・起動シーケンス・多重防御・フェイルセーフ動作確認
 
-**未検証**：上位 HW-I2C スレーブ側（ESP32 からの bundle 読取・DMA-TX）はコード完成・ビルド済だが実機通し確認は次段。
+**上位 HW-I2C スレーブ側も検証済み(2026-09)**：ESP32-C3 から status(12B) / bundle(389B, poll) の
+読取・ACK が通り、スパークで妨害波カウントが増加することを確認。
+> ⚠ 大容量 bundle(389B) 読取は ESP 側の既定 I2C タイムアウト(~50ms) では timeout(Error263) するため、
+> ホスト側で `Wire.setTimeOut(400)` + 「status で pending>0 の時だけ bundle を読む」最適化を実施
+> （詳細は [host_esp32c3](host_esp32c3/README.md) の該当節）。
+
+> ⚠ **CH32V003 書込み注意**：WCH-LinkE ファーム **v2.17** と PIO/ch32fun 同梱 minichlink の
+> 組み合わせで、`Interface Setup` 後に `Error sending WCH command` で書込みが停止する事象を確認
+> （読取り/haltは可・バイナリ無関係）。**WCH-LinkUtility(公式GUI)** で `firmware.bin` を `0x08000000`
+> へ書くか、minichlink を最新版に更新して回避する。
 
 ---
 
@@ -146,7 +173,12 @@ void loop(){
 
 ## ライセンス・クレジット
 
-- 本プロジェクトのコード：MIT（[LICENSE](LICENSE)）
-- [ch32fun](https://github.com/cnlohr/ch32fun)（MIT）— CH32V003 ランタイム
-- LCO 校正手順の出典：AE-AS3935 デモ / FreqCounter（Martin Nawrath, KHM LAB3, LGPL）※AVR コードは非移植、手順・目標値のみ流用
-- `AE_AS3935DEMO/` は秋月電子通商の配布物（参考・三者資料）
+- 本プロジェクトのコード：**独自の非商用ライセンス**（[LICENSE](LICENSE)）。
+  **非商用に限り**利用・改変・再配布は自由。**無保証・作者免責**。
+  **配布・フォーク時は、作者連絡先 `ghostinkoma@gmail.com` と本リポジトリ URL
+  `https://github.com/ghostinkoma/TinyWetherMemo` の明記を義務**とします（[LICENSE](LICENSE) 第2条）。
+  商用利用は作者へ個別許諾を（OSI 承認のオープンソースではありません）。
+- 作者連絡先: ghostinkoma@gmail.com ／ リポジトリ: https://github.com/ghostinkoma/TinyWetherMemo
+- [ch32fun](https://github.com/cnlohr/ch32fun)（MIT）— CH32V003 ランタイム（本リポジトリには非同梱）
+- LCO 校正手順の出典：FreqCounter（Martin Nawrath, KHM LAB3, LGPL）※AVR コードは非移植、手順・目標値のみ流用
+- AE-AS3935 モジュールのデモ資料（秋月電子通商）は開発時の参考のみ。**本リポジトリには再配布しません**（原配布元 https://akizukidenshi.com/ の条件に従い入手のこと）。

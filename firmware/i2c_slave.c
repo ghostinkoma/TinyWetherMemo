@@ -34,6 +34,10 @@ static uint8_t  g_rxbuf[8];
 static volatile uint8_t g_rxn = 0;
 static ts_state_t g_state = STATE_BOOT;
 
+/* diag counters (read from main loop) */
+volatile uint32_t g_i2c_addr_hits = 0;   /* ISR: 自分宛アドレス一致(=HWがACKした)回数 */
+volatile uint32_t g_i2c_resets    = 0;   /* i2c_slave_reset() を呼んだ回数            */
+
 static DiagStatus g_diag;              /* response buffers (DMA sources)      */
 static uint8_t    g_time[6];
 static uint8_t    g_info[8];
@@ -150,7 +154,7 @@ void i2c_slave_init(uint8_t addr)
     I2C1->CTLR1 |=  I2C_CTLR1_SWRST;
     I2C1->CTLR1 &= ~I2C_CTLR1_SWRST;
 
-    I2C1->CTLR2 = (SYS_CLK_HZ/1000000u) & 0x3F;   /* FREQ = PCLK1 MHz (=48)   */
+    I2C1->CTLR2 = (SYS_CLK_HZ/1000000u) & 0x3F;   /* FREQ = PCLK1 MHz (=SYS_CLK_HZ) */
     I2C1->OADDR1 = (uint16_t)((addr << 1)) | (1u<<14); /* 7-bit addr, bit14=1 */
     I2C1->CTLR1 |= I2C_CTLR1_ACK | I2C_CTLR1_PE;  /* ACK enable + peripheral on */
 
@@ -172,6 +176,7 @@ void i2c_slave_isr(void)
     uint16_t s1 = I2C1->STAR1;
 
     if (s1 & I2C_STAR1_ADDR) {
+        g_i2c_addr_hits++;                  /* diag: 上位バスで自分宛に呼ばれた */
         uint16_t s2 = I2C1->STAR2;          /* reading STAR1+STAR2 clears ADDR */
         if (s2 & I2C_STAR2_TRA) {
             /* Master is reading us -> serve response by DMA. */
@@ -279,12 +284,24 @@ void i2c_slave_set_state(ts_state_t state) { g_state = state; }
 
 uint8_t i2c_slave_stuck(void)
 {
-    /* BUSY latched with no active transfer is a wedge indicator. */
-    return (I2C1->STAR2 & I2C_STAR2_BUSY) ? 1 : 0;
+    /* BUG FIX: 以前は BUSY を見た瞬間に stuck 判定していたが、BUSY は「他マスタ
+     * (ESP)が通常通信中」でも立つ。上位バスは常に賑やかなので、これだと毎ループ
+     * i2c_slave_reset() が走りスレーブが再init され続け、ホストの ADDR を取り
+     * こぼす(=0x28 NG)。本当の wedge は「BUSY が連続して長時間続く」場合だけ。
+     * → BUSY が連続 25ms 以上のときのみ stuck とみなす。 */
+    static uint64_t busy_since = 0;
+    if (I2C1->STAR2 & I2C_STAR2_BUSY) {
+        uint64_t now = softclock_ms();
+        if (busy_since == 0) busy_since = now ? now : 1;
+        return ((uint32_t)(now - busy_since) > 25u) ? 1 : 0;
+    }
+    busy_since = 0;
+    return 0;
 }
 
 void i2c_slave_reset(void)
 {
+    g_i2c_resets++;
     dma_stop();
     I2C1->CTLR1 |= I2C_CTLR1_SWRST;
     for (volatile int i = 0; i < 100; i++) { }
