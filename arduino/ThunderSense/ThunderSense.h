@@ -68,9 +68,9 @@
 
 // ---- defaults ---------------------------------------------------------------
 #define TS_DEFAULT_ADDR   0x28    // bridge 7-bit I2C slave address
-#define TS_MAX_EVENTS     32      // bins per bundle (bridge N_BINS)
+#define TS_MAX_EVENTS     32      // bins per bundle. ★MUST match firmware MAX_EVENT_COUNT (config.h)
 #define TS_BIN_SIZE       12      // wire bytes per event
-#define TS_BUNDLE_SIZE    (3 + TS_MAX_EVENTS * TS_BIN_SIZE + 2)  // 389
+#define TS_BUNDLE_SIZE    (3 + TS_MAX_EVENTS * TS_BIN_SIZE + 2)  // 389 @ TS_MAX_EVENTS=32
 
 // ---- return codes (poll / low-level) ----------------------------------------
 enum {

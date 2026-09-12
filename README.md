@@ -162,6 +162,7 @@ Verified on hardware. Detailed logs → [TESTLOG.md](TESTLOG.md) and [Docs/TEST_
 - [Docs/README.md](Docs/README.md) — design rationale (why a bridge / scheduling philosophy / defense-in-depth)
 - [Docs/SPEC.md](Docs/SPEC.md) — detailed spec (structs, state machines, priorities, DMA, calibration, health, flash, memory budget)
 - [Docs/I2C_REFERENCE.md](Docs/I2C_REFERENCE.md) — I2C command spec (all 14 commands)
+- [Docs/EVENT_STORAGE_AND_COMMANDS.md](Docs/EVENT_STORAGE_AND_COMMANDS.md) — event-buffer & command-path architecture note (why N_BINS=32; N_BINS ⟂ command path)
 - [Docs/TEST_LOG/](Docs/TEST_LOG/) — dated on-device test logs
 - [arduino/ThunderSense/ThunderSense.h](arduino/ThunderSense/ThunderSense.h) — host API (self-documenting)
 

@@ -168,6 +168,7 @@ void loop(){
 - [Docs/README.md](Docs/README.md) — 設計根拠（なぜブリッジ／スケジューリング哲学／多重防御）
 - [Docs/SPEC.md](Docs/SPEC.md) — 詳細仕様（構造体・状態機械・優先度・DMA・校正・健康度・フラッシュ・メモリ収支）
 - [Docs/I2C_REFERENCE.md](Docs/I2C_REFERENCE.md) — I2C コマンド仕様（全 14 コマンド）
+- [Docs/EVENT_STORAGE_AND_COMMANDS_JP.md](Docs/EVENT_STORAGE_AND_COMMANDS_JP.md) — イベントバッファ & コマンド経路のアーキノート（なぜN_BINS=32か／N_BINS ⟂ コマンド経路）
 - [Docs/TEST_LOG/](Docs/TEST_LOG/) — 日付別の実機テストログ
 - [arduino/ThunderSense/ThunderSense.h](arduino/ThunderSense/ThunderSense.h) — ホスト API（自己文書化）
 

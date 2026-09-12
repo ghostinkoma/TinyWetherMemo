@@ -33,7 +33,16 @@
 #define AS3935_ADDR        0x00   /* verified on hardware (AE-AS3935 responds at 0x00)  */
 
 /* ---------------- Buffer sizing (Docs/SPEC.md §2, §11) ---------------- */
-#define N_BINS             32     /* bins per bundle (SRAM-bounded; do not exceed w/o remeasuring) */
+/* 1バンドルに保持する落雷イベント最大数（将来の増減はここだけ変更＝布石）。
+ * ★ホスト lib/ThunderSense の TS_MAX_EVENTS と必ず一致させること
+ *   （バンドル転送長 = 3 + 12×N + 2 が両者の配線契約。不一致は CRC 不整合になる）。
+ * RAM 収支（2KB SRAM, トリプル）: 実静的 ≈ 204 + 36×N バイト。
+ * ★上限は mem.h の SRAM_STACK_MIN=640B（EXTI→2msタイマ→I2Cスレーブ→DMA のISRネスト＋SW-I2C用）
+ *   に律速される。静的アサート(mem.h)が通る上限 = N=35、実マップ整合(misc≈189B)なら N≈33。
+ *   40 にするには 640B 予約を下げる必要があり、その前に TS_DEBUG_STACK で実スタック高水位を測定し
+ *   根拠を得ること（未測定でのN≥36は不可＝ビルドが弾く）。 */
+#define MAX_EVENT_COUNT    32     /* 落雷イベント格納数（bins/bundle）。既定32。上限35(要640B予約) */
+#define N_BINS             MAX_EVENT_COUNT   /* 内部エイリアス（protocol.h / bundle.c が使用） */
 #define N_BUNDLES          3      /* triple buffer: fill / serve / clearing (SPEC §9) */
 #define CMDBUF_DEPTH       1      /* command slots (1 is enough with Busy handshake) */
 
