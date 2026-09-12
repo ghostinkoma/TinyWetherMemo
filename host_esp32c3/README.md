@@ -1,133 +1,98 @@
-# WetherLoggerBox (ESP32-C3 ホスト)
+# WetherLoggerBox (ESP32-C3 host)
 
-簡易百葉箱ロガー。**温度/湿度/気圧 + 雷** を測定し、Web ダッシュボード(6ページ SPA)で
-表示・設定する。雷は AS3935→CH32V003 **ThunderSence** ブリッジ(I2C スレーブ 0x28)から取得。
+*English (this file) · [日本語 → README_JP.md](README_JP.md)*
 
-- 仕様: [Docs/SPEC.md](Docs/SPEC.md) ／ アーキ: [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md)
-- センサ: [Docs/SENSORS.md](Docs/SENSORS.md) ／ 雷・危険度: [Docs/LIGHTNING.md](Docs/LIGHTNING.md)
+A small weather-shelter logger. It measures **temperature / humidity / pressure + lightning** and shows/configures everything from a Web dashboard (a 7-page SPA). Lightning comes from the AS3935 → CH32V003 **ThunderSense** bridge (I2C slave 0x28).
 
-## ハード / 配線 (I2C 共有バス)
-| 信号 | ESP32-C3 |
+- Spec: [Docs/SPEC.md](Docs/SPEC.md) · Architecture: [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md)
+- Sensors: [Docs/SENSORS.md](Docs/SENSORS.md) · Lightning / risk: [Docs/LIGHTNING.md](Docs/LIGHTNING.md)
+
+## Hardware / wiring (shared I2C bus)
+| Signal | ESP32-C3 |
 |---|---|
 | SDA | GPIO8 |
 | SCL | GPIO9 |
 
-同一 I2C バス上: **AHT20(0x38)** + **BMP280(0x76/0x77)** + **ThunderSence 雷(0x28)** (+任意 OLED 0x3C)。
-bring-up は 100kHz(`config.h WLB_I2C_HZ`)。GND 共通・3.3V 必須。
-> CH32V003 側配線・ファームは親リポジトリ [../firmware](../firmware) と [../README.md](../README.md)。
+On the same I2C bus: **AHT20(0x38)** + **BMP280(0x76/0x77)** + **ThunderSense lightning(0x28)** (+ optional OLED 0x3C).
+Bring-up at 100 kHz (`config.h WLB_I2C_HZ`). Common GND, 3.3 V required.
+> CH32V003 wiring/firmware are in the parent repo: [../firmware](../firmware) and [../README.md](../README.md).
 
-## ビルド / 書き込み (PlatformIO)
+## Build / flash (PlatformIO)
 ```
-pio run                                  # ビルド
-pio run -t upload --upload-port COM13    # 書込 (ポートは環境依存。COM7/8 は AquaController)
+pio run                                  # build
+pio run -t upload --upload-port COMxx    # flash (port is environment-specific)
 ```
-プラットフォームは **pioarduino (arduino-esp32 コア3.x)**。ESP32-C3 のネイティブ USB は
-`pio device monitor` (miniterm/pyserial) が Windows で不安定なため、**動作確認は Web** で行う。
-> Windows で `pio` が PATH に無い場合: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` を直接実行。
+Platform is **pioarduino (arduino-esp32 core 3.x)**. The ESP32-C3 native USB is unstable for `pio device monitor` (miniterm/pyserial) on Windows, so **verify behavior over the Web** instead.
+> ⚠ Before flashing, confirm the target with `esptool read_mac` — never overwrite an unrelated ESP32.
+> On Windows, if `pio` is not on PATH, run `%USERPROFILE%\.platformio\penv\Scripts\pio.exe` directly.
 
-## 初回セットアップ (秘密情報 — clone 直後に必要)
-公開リポジトリに実資格情報/秘密鍵は含めない。以下は **`.gitignore` 済み**で、clone 後に各自用意する
-(未用意でもプレースホルダ/公開サンプルでビルドは通る)。
-1. **WiFi 資格情報**: [`src/config.local.h.example`](src/config.local.h.example) を
-   **`src/config.local.h`** にコピーし、自分の SSID / パスワード(必要なら `WLB_AP_PASS`)を記入。
-   `config.h` から自動 include され既定より優先される。未作成時は起動後に WiFi 設定ページからも投入可。
-2. **TLS 証明書/鍵 (HTTPS)**: `powershell -ExecutionPolicy Bypass -File tools\gen_cert.ps1` で
-   デバイス固有の **`src/cert_pem.h`** を生成(要 openssl)。未生成時は公開ダミー
-   [`src/cert_pem_sample.h`](src/cert_pem_sample.h) へ自動フォールバック(**この鍵は公開=保護価値なし**、必ず再生成)。
-3. **既定ログイン**: `wether/wether`(config.h `WLB_AUTH_DEFAULT_*`) は初回シード → **ログイン後に必ず変更**。
-   SoftAP パス既定 `wetherbox`(`WLB_AP_PASS`) も運用前に変更推奨。
+## First-time setup (secrets — needed right after clone)
+Real credentials / private keys are **not** committed. The following are `.gitignore`d; create them per-machine after cloning (the build still works without them, using placeholders / a public sample).
+1. **WiFi credentials**: copy [`src/config.local.h.example`](src/config.local.h.example) to **`src/config.local.h`** and fill in your SSID / password (and `WLB_AP_PASS` if wanted). It is auto-included from `config.h` and overrides the defaults. If absent, you can also enter WiFi from the settings page after boot.
+2. **TLS cert/key (HTTPS)**: run `powershell -ExecutionPolicy Bypass -File tools\gen_cert.ps1` to generate a device-unique **`src/cert_pem.h`** (needs openssl). If absent it falls back to the public dummy [`src/cert_pem_sample.h`](src/cert_pem_sample.h) (**that key is public = no protection**; always regenerate).
+3. **Default login**: `wether/wether` (config.h `WLB_AUTH_DEFAULT_*`) is a first-boot seed → **change it after logging in**. The SoftAP default pass `wetherbox` (`WLB_AP_PASS`) should also be changed before deployment.
 
-## WebUI 配置 / 構成 (リファレンス)
-ダッシュボードは **単一 SPA (HTML+CSS+JS 一体)**。配置と配信は次のとおり:
+## Web UI layout / structure (reference)
+The dashboard is a **single SPA (HTML+CSS+JS combined)**. Layout & delivery:
 
-| 要素 | 実体 | 役割 |
+| Element | Where | Role |
 |---|---|---|
-| **SPA 原本** | [`src/web_ui.cpp`](src/web_ui.cpp) 内 `PAGE[]` (`R"HTML(...)HTML"` 生文字列) | **編集はここが唯一の真実(source of truth)** |
-| **配信データ** | [`src/web_page_gz.h`](src/web_page_gz.h) `WLB_PAGE_GZ[]` | 原本を gzip 圧縮した自動生成物。`handleRoot` が `Content-Encoding: gzip` で配信 |
-| REST API | `src/web_ui.cpp` の `handle*` | 後述のエンドポイント |
+| **SPA source** | `PAGE[]` in [`src/web_ui.cpp`](src/web_ui.cpp) (a `R"HTML(...)HTML"` raw string) | **the single source of truth — edit here** |
+| **Served data** | `WLB_PAGE_GZ[]` in [`src/web_page_gz.h`](src/web_page_gz.h) | gzip of the source, auto-generated; `handleRoot` serves it with `Content-Encoding: gzip` |
+| REST API | `handle*` in `src/web_ui.cpp` | endpoints below |
 
-**gzip 再生成手順 (HTML を編集したら必ず実行)** — cp932 誤読による文字化けを避けるため **UTF-8 厳守**:
-1. `web_ui.cpp` の `R"HTML(` … `)HTML"` の中身を **UTF-8** で読み出す (`[IO.File]::ReadAllText(path,[Text.Encoding]::UTF8)`)。
-2. `System.IO.Compression.GZipStream(Optimal)` で圧縮。
-3. `WLB_PAGE_GZ_LEN` と `WLB_PAGE_GZ[] PROGMEM = {0x..}` を `web_page_gz.h` へ出力。
-4. 再ビルド。`gunzip` ラウンドトリップで日本語(例「時間足」)が壊れていないか確認。
-> `Get-Content -Raw`(既定 cp932) で読むと日本語が化ける。必ず `-Encoding UTF8` / `ReadAllText(...,UTF8)`。
+**Regenerate the gzip (run after editing the HTML)** — keep **UTF-8** to avoid cp932 mojibake:
+`powershell -ExecutionPolicy Bypass -File tools\gen_page_gz.ps1` (extracts the `R"HTML(...)HTML"` body, gzips as UTF-8, writes `web_page_gz.h`, and round-trip verifies). Then rebuild.
+> Reading with `Get-Content -Raw` (default cp932) mangles Japanese — always use UTF-8.
 
-**REST エンドポイント**: `/`(gzip SPA) ／ `/chart.min.js`(**ローカル同梱 Chart.js**; gzip, CDN非依存) ／
-`/api/auth`・`/api/login`・`/api/logout`・`/api/passwd`(認証) ／ `/api/now` ／
-`/api/history?scope=`(**live/min/hour/day/week/month**; 時足以降は FS 長期履歴) ／ `/api/settings` ／
-`/api/wifi`・`/api/wifi/scan` ／ `/api/calib` ／ `/api/offset` ／ `/api/logcfg` ／
-`/api/csv`(DL 時のみヘッダ付与) ／ `/api/logclear`。**`/`と`/chart.min.js`と認証3種以外は要ログイン(401)**。
+**UI language**: English by default, Japanese selectable in the **Settings** page (stored in the browser). See `web_ui.cpp` `I18N`.
 
-## セキュリティ (ESP32 HW セキュリティ・ペリフェラル活用)
-- **ログイン認証** [`src/auth.cpp`](src/auth.cpp): **SHA-256(HW)** でソルト付きパスワードハッシュ、
-  **RNG(HW `esp_random`)** でソルト/セッショントークン(128bit)。Cookie セッション(24h スライディング)。
-  既定 `WLB_AUTH_DEFAULT_USER/PASS`(config.h)=`wether/wether` → 初回シード、**ログイン後に変更推奨**。
-  P3「アカウント」でパスワード変更(変更で全セッション失効)。無効化は `WLB_AUTH_ENABLE 0`。
-- **設定パスワード暗号化** [`src/settings.cpp`](src/settings.cpp): WiFi パスワードを **AES-256-CBC(HW)** で
-  `passenc=` として保存(平文非保持)。鍵=SHA-256(STA MAC + 固定salt)=デバイス固有。IV は毎回 RNG。
-  ※フラッシュ暗号化(eFuse)なしでは鍵はMAC由来で導出可能=難読化グレード。真の機密化は Secure Boot/
-  Flash Encryption(eFuse=物理・不可逆)が必要。RSA(HW)は HTTPS/Secure Boot 導入時に活用余地。
-- **設定用 SoftAP は WPA2**(`WLB_AP_PASS`, 8文字以上)。無認証な近接再設定を防止。
-- **HTTPS(TLS)**: Web サーバを `esp_http_server`(httpd) へ移植し、**HTTP(80) と HTTPS(443) を併設**
-  ([web_httpd.h](src/web_httpd.h) が WebServer 風シムで既存ハンドラを流用、両サーバに同一ハンドラ登録)。
-  証明書は **自己署名 EC P-256(ECDSA)** ([cert_pem.h](src/cert_pem.h); TLSは mbedtls/HW支援)。
-  ⚠ 自己署名のためブラウザは毎回「安全でない接続」警告を出す(LAN機器はCA発行不可)。真の信頼には
-  独自ドメイン+ACME か、内部CAの証明書配布が必要。RSA-2048 も選択可だがハンドシェイクが重いため EC を採用。
+**REST endpoints**: `/` (gzip SPA) · `/chart.min.js` (**locally bundled Chart.js**; gzip, no CDN) · `/api/auth`·`/api/login`·`/api/logout`·`/api/passwd` (auth) · `/api/now` · `/api/history?scope=` (**live/min/hour/day/week/month**; hourly+ from FS long-term history) · `/api/settings` · `/api/wifi`·`/api/wifi/scan` · `/api/calib` · `/api/offset` · `/api/logcfg` · `/api/csv` (header added only on download) · `/api/logclear`. **Everything except `/`, `/chart.min.js` and the 3 auth endpoints requires login (401).**
 
-## 使い方 (Web ダッシュボード)
-1. 起動直後は **SoftAP `WetherLogger`(WPA2, 既定パス `wetherbox`)** が常設 → スマホ等で接続し **http://192.168.4.1/**。
-2. 「3 WiFi設定」で自宅 SSID/パスワード/mDNS名(既定 **WetherMemo**)を保存 → 再起動で STA 接続。
-3. 以後は同一 LAN から **http://WetherMemo.local/** (mDNS) または払い出し IP で到達。
+## Security (using ESP32 HW security peripherals)
+- **Login auth** [`src/auth.cpp`](src/auth.cpp): salted password hash with **SHA-256 (HW)**, salt / 128-bit session token from **HW RNG (`esp_random`)**. Cookie session (24 h sliding). Default `WLB_AUTH_DEFAULT_USER/PASS` = `wether/wether` (first-boot seed, **change after login**). Password change on the Settings/account UI (revokes all sessions). Disable with `WLB_AUTH_ENABLE 0`.
+- **Settings password encryption** [`src/settings.cpp`](src/settings.cpp): the WiFi password is stored **AES-256-CBC (HW)** as `passenc=` (no plaintext). Key = SHA-256(STA MAC + fixed salt) = device-specific; IV is random each time. ⚠ Without flash encryption (eFuse) the key is MAC-derivable = obfuscation-grade; true secrecy needs Secure Boot / Flash Encryption (eFuse, physical, irreversible).
+- **Setup SoftAP is WPA2** (`WLB_AP_PASS`, ≥8 chars) — prevents unauthenticated nearby reconfiguration.
+- **HTTPS (TLS)**: the web server was ported to `esp_http_server` (httpd), running **HTTP(80) and HTTPS(443) together** ([web_httpd.h](src/web_httpd.h) is a WebServer-style shim reusing existing handlers). Cert is **self-signed EC P-256 (ECDSA)** ([cert_pem.h](src/cert_pem.h); TLS via mbedtls/HW). ⚠ Self-signed → the browser warns "not secure" each time; real trust needs your own domain + ACME, or an internal-CA cert.
 
-### 6 ページ (三線メニュー / レスポンシブ / ダーク・ライト切替 ◐)
-1. **ダッシュボード**: 温度・湿度・気圧、直近30分の雷頻度、**危険度**(積和; [LIGHTNING.md](Docs/LIGHTNING.md))。
-2. **チャート**: Chart.js 時系列。**ライブ/分足/時間足/日/週/月**(年足は廃止=データ量過大)。
-   時間足以降は FS 長期履歴(絶対epoch)から取得し、未蓄積時は細かい足へフォールバックして必ず描画。
-   ※Chart.js は CDN 取得のため**チャート表示はインターネット接続(STA)が必要**。
-3. **WiFi設定**: SSID 選択+PW、mDNS 名、AP/STA。STA 時は払い出し IP・本機 AP SSID 表示。
-4. **雷キャリブレーション**: LCO 再校正+結果、室内/室外、NF_LEV、WDTH、SREJ、最小落雷数
-   (AE-AS3935 マニュアル準拠)。
-5. **温湿度オフセット**: 温度/湿度に加算補正。
-6. **データ/測定頻度**: 測定周期(既定5秒)、最小最大除外+n平均(除外時 n≥4)、**CSV DL**。
-   CSV 列 = `time,temp,humi,thunder`(ヘッダは DL 時のみ付与)。time=NTP日時、temp=**AHT20のみ**、
-   thunder=危険度%。BMP280(気圧)は冗長のため CSV 非記録。
+## WiFi mode (AP or STA — mutually exclusive)
+Following AquaController, **AP and STA are never up at the same time** (running both would expose the upstream LAN through the AP). On boot: `staMode=STA` with an SSID → **STA only**; SSID empty / AP selected → **AP only**. If STA cannot connect within `WLB_STA_FALLBACK_MS`, it **falls back to AP** so the device stays reachable for reconfiguration.
 
-設定は **LittleFS `/settings.ini`** 永続化。校正/感度は Web→ioTask のキュー経由で AS3935 へ反映
-(I2C 単独所有を厳守)。
+## Usage (Web dashboard)
+1. If not configured (or in AP mode), a **SoftAP `WetherLogger` (WPA2, default pass `wetherbox`)** comes up → connect and open **http://192.168.4.1/**.
+2. On the **WiFi** page, save your SSID / password / mDNS name (default **WetherMemo**) and boot mode = STA → reboot connects as STA (AP is not kept up).
+3. Then reach it on the same LAN via **http://WetherMemo.local/** (mDNS) or the assigned IP.
 
-## データ永続化 / 時刻
-- **CSV ログ** `/log.csv`(900KB で `/log.old.csv` へ1世代退避)。オフライン(NTP未同期)時は
-  `B<起動秒>` で記録し、NTP 確定時に `datalog_patch_boottime()` が絶対時刻へ一括置換。
-- **FS 長期履歴** [`src/histfs.cpp`](src/histfs.cpp): 時足(1時間代表値)を `/hist.bin` に 15B/レコードで
-  追記(`WLB_HISTFS_CAP`=2160≒90日, 超過で1世代退避)。**絶対epoch**で保存し、日/週/月足は再起動を
-  またいで描画。起動時に末尾を RAM 時足リングへ復元(`histfs_seed`)。FS 書込は **loopTask 単独**。
-- 履歴の RAM リングは **int16 固定小数点圧縮 (15B/レコード)**: 温湿度×100 / 気圧 `(hPa-1000)×100`。
+### 7 pages (hamburger menu / responsive / dark-light toggle ◐ / EN·JP)
+1. **Home**: temperature / humidity / pressure, last-30-min lightning frequency, **risk** (weighted sum; [LIGHTNING.md](Docs/LIGHTNING.md)).
+2. **Chart**: Chart.js time series. **live / 1-min / hourly / day / week / month**. Hourly+ come from FS long-term history (absolute epoch); falls back to a finer resolution when not yet accumulated, so it always draws. **Chart.js is bundled locally, so charts work without internet.** Hidden series stay hidden across live updates.
+3. **WiFi**: SSID pick + password, mDNS name, boot mode (AP/STA). In STA it shows the assigned IP and the device's own AP SSID / current mode.
+4. **Lightning calibration**: LCO recalibration + result, indoor/outdoor, NF_LEV, WDTH, SREJ, MIN_NUM (per the AE-AS3935 manual). See [Docs/TEST_LOG](../Docs/TEST_LOG/) for a spark-test calibration note.
+5. **Temp/Humidity offset**: additive correction on temperature / humidity.
+6. **Data / logging**: measurement period (default 5 s), drop-min/max + n-average (n≥4 when dropping), **CSV download**. CSV columns = `time,temp,humi,thunder` (header added only on download). time = NTP datetime, temp = **AHT20 only**, thunder = risk%. BMP280 (pressure) is redundant and not logged to CSV.
+7. **Settings**: UI language (English / 日本語).
 
-## 信頼性 / 電源 / 時刻
-- **WiFi 接続**: 起動時スキャンで同一SSID メッシュの**最強RSSI BSSID へロック接続**。
-  **メッシュ再ローミング** (`maybeRoam`): 接続後も RSSI を監視し `< WLB_ROAM_RSSI_TH`(-75dB) の時のみ
-  再スキャンし、+`WLB_ROAM_MARGIN`(8dB) 以上強い BSSID へ張り替え。機能トグル `WLB_ENABLE_*`(config.h)。
-- **タスクWDT** (`WLB_WDT_TIMEOUT_MS`=30s): io/loop 両タスク監視、ハング時パニック→自動再起動。coredump 保存。
-- **RTC 時刻保持** ([`src/wifi_session.cpp`](src/wifi_session.cpp) begin): ESP32-C3 の RTC は CPU ソフトリセット
-  (WDT再起動等)を跨いで時刻保持。前回 NTP 同期済なら再起動直後に `time()>閾値` を検出して即 timeValid とし、
-  NTP を待たずイベント/CSV に正しい時刻を付与(電源断では 1970 に戻り誤検出しない)。
-- **大容量CSV配信**は 8KB 毎に `yield()`+WDT feed し、DL 中も WiFi/NTP と ioTask(センサ)を止めない。
-- ⚠ **デバッグ注意**: COM13 の SerialPort を開くと C3 がリセットされる。稼働中の検証は HTTP のみで行う。
+Settings persist in **LittleFS `/settings.ini`**. Calibration/sensitivity reach the AS3935 via a Web→ioTask queue (I2C stays single-owner).
 
-## パーティション ([partitions.csv](partitions.csv))
-ビルド実測(app≒1.12MB)から算定: **factory(app)=1.375MB / spiffs(FS)=2.5MB / coredump=64KB**。
-1MB app はバイナリが収まらないため不可。オフセット変更時は次回起動で LittleFS が再フォーマットされる。
+## Data persistence / time
+- **CSV log** (daily-ring, date-named files, time-only rows). Offline (NTP not synced) rows are written as `B<boot-seconds>` and converted to absolute time once NTP locks (`datalog_patch_boottime()`).
+- **FS long-term history** [`src/histfs.cpp`](src/histfs.cpp): the per-average value is appended to `/hist.bin` at 15 B/record with **absolute epoch**, so day/week/month charts survive reboots. On boot the tail is restored into the RAM ring (`histfs_seed`). FS writes are **loopTask only**.
+- The RAM history ring uses **int16 fixed-point compression (15 B/record)**: temp/humidity ×100, pressure `(hPa-1000)×100`.
 
-## 実装状況
-- **完了**: 6ページ SPA、現在値/雷危険度、ライブ/分足/時間足チャート+**FS長期履歴(日/週/月)**、
-  WiFi(AP/STA/mDNS)+再ローミング、校正/感度(サーバ側クランプ)、オフセット、測定頻度、LittleFS 永続化、
-  CSV ログ(NTP時刻/オフライン救済/DL時yield)、int16圧縮、WDT、**RTC時刻保持**、
-  **ログイン認証(SHA-256/RNG)+パスワード変更**、**設定AES暗号化**、**SoftAP WPA2**、**Chart.js ローカル同梱**。
-- **雷イベント経路(poll)修正済**: 389B束読み(CMD_READ_BUNDLE)が既定I2Cタイムアウト(~50ms)超過で
-  Error263になっていた → (1) `Wire.setTimeOut(WLB_I2C_TIMEOUT_MS=400)` で延長、(2) 12BのreadStatusで
-  `pending>0` の時だけ束読みするよう最適化(待機中は大容量読みゼロ=Error263根絶)。実機で待機中エラー0を確認。
-- **省電力**: ESP32=WiFiモデムスリープ(`WIFI_PS_MIN_MODEM`)+CPU 80MHz(160→80)。応答~100ms維持を実測。
-  CH32V003=PLL停止でHSI直結 **48→24MHz**(スリープはせず雷IRQ常時捕捉/[firmware/funconfig.h](../firmware/funconfig.h))。
-- **HTTPS(443) 併設**: httpd 移植 + 自己署名 EC P-256。HTTP(80)も維持。実機で HTTP/HTTPS 両疎通確認。
-- **未 (別途)**: MySQL/SQL 送信、Secure Boot/Flash Encryption(eFuse=物理)、真の自動ライトスリープ(要デューティ設計)。
+## Reliability / power / time
+- **WiFi**: at boot, scan and **lock onto the strongest-RSSI BSSID** of the same-SSID mesh. **Mesh re-roaming** (`maybeRoam`): while connected, watch RSSI and only when `< WLB_ROAM_RSSI_TH` (-75 dB) rescan and switch to a BSSID at least `WLB_ROAM_MARGIN` (8 dB) stronger. Feature toggles `WLB_ENABLE_*` (config.h).
+- **Task WDT** (`WLB_WDT_TIMEOUT_MS`=30 s): watches io/loop tasks, panics → auto-reboot on hang, saves a coredump.
+- **RTC time retention** ([`src/wifi_session.cpp`](src/wifi_session.cpp)): the ESP32-C3 RTC keeps time across a CPU soft reset (WDT reboot etc.). If NTP was synced before, it becomes timeValid immediately after reboot (no waiting for NTP); a real power loss resets to 1970 so it doesn't misfire.
+- **Large CSV downloads** `yield()` + feed the WDT every ~8 KB, so WiFi/NTP and the ioTask (sensors) keep running during a download.
+- **★ WiFi-loss resilience**: capture/count/FS-logging run over local I2C and are **independent of WiFi**, so a WiFi drop does not lose lightning events (proven on hardware — see [../Docs/TEST_LOG/WetherLoggerBox_2026-09-13.md](../Docs/TEST_LOG/WetherLoggerBox_2026-09-13.md)).
+- ⚠ **Debug note**: opening the ESP32-C3 USB serial port resets the C3, so verify a running device over HTTP only.
+
+## Partitions ([partitions.csv](partitions.csv))
+From measured build (app ≈ 1.3 MB): **factory(app)=1.375 MB / spiffs(FS)=2.5 MB / coredump=64 KB**. A 1 MB app is too small for the binary. Changing offsets re-formats LittleFS on next boot.
+
+## Implementation status
+- **Done**: 7-page SPA, current values / lightning risk, live/1-min/hourly chart + **FS long-term history (day/week/month)**, WiFi (AP/STA/mDNS, **AP-STA exclusive** + STA→AP fallback) + re-roaming, calibration/sensitivity (server-side clamp), offset, measurement frequency, LittleFS persistence, CSV log (NTP time / offline rescue / yield on download), int16 compression, WDT, **RTC time retention**, **login auth (SHA-256/RNG) + password change**, **settings AES encryption**, **SoftAP WPA2**, **Chart.js bundled locally**, **bilingual UI (EN default / JP)**, chart series-visibility kept across updates.
+- **Lightning poll (389 B) fix**: the bundle read (CMD_READ_BUNDLE) exceeded the default I2C timeout (~50 ms) → Error263. Fixed with (1) `Wire.setTimeOut(WLB_I2C_TIMEOUT_MS=400)`, (2) read the bundle only when a 12 B status shows `pending>0` (zero large reads while idle). Verified idle-error = 0 on hardware.
+- **Power**: ESP32 = WiFi modem sleep (`WIFI_PS_MIN_MODEM`) + 80 MHz CPU (160→80). CH32V003 = 48 MHz default; a 24 MHz HSI-direct option exists (bridge verified working, ~1.8 mA saving — 48 MHz kept for stability).
+- **HTTPS(443) alongside HTTP(80)**: httpd port + self-signed EC P-256. Verified on hardware.
+- **Not done (separate)**: MySQL/SQL upload, Secure Boot / Flash Encryption (eFuse, physical), true automatic light sleep (needs duty-cycle design).

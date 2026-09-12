@@ -1,128 +1,129 @@
 # TinyWetherMemo
 
-**AS3935 雷センサ → CH32V003 → I2C ブリッジ** と、上位ホスト（ESP32）用ライブラリ。
+*English (this file) · [日本語 → README_JP.md](README_JP.md)*
 
-秋月 **AE-AS3935**（AMS AS3935 Franklin Lightning Sensor）を **CH32V003J4M6 (SOP-8)** が受け、
-雷/妨害波イベントを**リアルタイム捕捉・絶対時刻付与・強度上位32を保持**し、上位バスへ
-**I2C スレーブ**として供給します。ホストは「ポーリングして読むだけ」。
+An **AS3935 lightning sensor → CH32V003 → I2C bridge**, plus a host application and library for an upstream ESP32.
 
-> センサ本体は「500kHz 同調の AM 受信＋エンベロープ検波＋内蔵判定器」。生波形は出ず、
-> 雷/妨害波の**判定結果**（距離・エネルギー）だけを返す“判定器”です。本ブリッジはそれを
-> 隔離・時刻付け・バッファし、扱いやすい形にします。
+A **CH32V003J4M6 (SOP-8)** receives the Akizuki **AE-AS3935** (AMS AS3935 Franklin Lightning Sensor), **captures lightning / disturber events in real time, stamps them with an absolute time, keeps the strongest 32**, and serves them to the upstream bus as an **I2C slave**. The host just "polls and reads".
+
+> The sensor itself is a "500 kHz-tuned AM receiver + envelope detector + built-in decision engine". It does not output a raw waveform — only the **classification result** (distance, energy) for lightning / disturbers. This bridge isolates, time-stamps and buffers that into an easy-to-use form.
 
 ---
 
-## 特徴
+## Features
 
-- **隔離ブリッジ**：癖の強い AS3935 I2C を **ローカル SW-I2C** に閉じ込め、上位バス（温湿度センサ等と同居）を守る
-- **イベント駆動捕捉**：EXTI(最優先) で発生時刻を µs で確定 → 2ms 後にレジスタ読取 → ビン化（多重防御 L1–L4）
-- **絶対タイムスタンプ**：CH32V003 は RTC 無 → SysTick ソフト時計を ESP32 の NTP と対応付け
-- **ロスセーフ配送**：389B 固定バンドル＋**CRC16**、**非破壊 read＋(gen,crc) 指定 CLEAR**（検証成功時のみ削除）
-- **荒天対策**：満杯時は**エネルギー上位32を保持**（弱い雷を置換、ソート無し）＋単調カウンタで総数保全
-- **トリプルバッファ**：fill / serve / 背景クリア を分離（クリアは CRC 先消去）
-- **感度・校正の全制御**：AFE(屋内/屋外)・ノイズフロア・WDTH・SREJ・MIN_NUM・任意レジスタ R/W・
-  LCO 再校正（結果ポーリング）を **ホスト I2C から**
-- **フラッシュ校正保存**：LCO 校正値(TUN_CAP)を option-byte に保存→次回高速起動
-- **フェイルセーフ**：センサ異常時も上位バスは生存（空バンドル＋FAULT 状態）／IWDG／SW-I2C 全ループ timeout
-- **省メモリ**：2KB SRAM に triple/32＋全機能で **RAM 66% / Flash 55%**（DEBUG=0）
+- **Isolation bridge**: confines the finicky AS3935 I2C to a **local SW-I2C**, protecting the upstream bus (shared with temp/humidity sensors, etc.).
+- **Event-driven capture**: EXTI (top priority) fixes the event time in µs → register read after a 2 ms settle → binning (defense-in-depth L1–L4).
+- **Absolute timestamp**: the CH32V003 has no RTC → a SysTick soft clock is aligned to the ESP32's NTP.
+- **Loss-safe delivery**: fixed 389 B bundle + **CRC16**, **non-destructive read + (gen, crc)-qualified CLEAR** (deleted only after the read verifies).
+- **Bad-weather handling**: when full, **keeps the top 32 by energy** (weak strikes replaced, no sort) + monotonic counters preserve totals.
+- **Triple buffer**: fill / serve / background-clear are separated (clear erases CRC first).
+- **Full sensitivity / calibration control from the host I2C**: AFE (indoor/outdoor), noise floor, WDTH, SREJ, MIN_NUM, arbitrary register R/W, LCO recalibration (with result polling).
+- **Flash-stored calibration**: the LCO tuning value (TUN_CAP) is saved to an option byte → fast start next boot.
+- **Fail-safe**: the upstream bus stays alive even on sensor failure (empty bundle + FAULT state) / IWDG / timeouts on every SW-I2C loop.
+- **Low memory**: with triple/32 + all features in 2 KB SRAM → **RAM 66% / Flash 55%** (DEBUG=0).
 
 ---
 
-## アーキテクチャ
+## Architecture
 
 ```
-            SW-I2C(master)                    HW-I2C(slave, 0x28)
+            SW-I2C (master)                   HW-I2C (slave, 0x28)
   AS3935  ───────────────►  CH32V003J4M6  ───────────────►  ESP32 (host, NTP)
-   │IRQ ─EXTI(最優先)────►  capture(L1-4) → bin → bundle(triple) ──DMA──► poll
-   └ 500kHz 同調アンテナ        │ SysTick 時計 / IWDG / health(VDD)
-                               └ 異常時もスレーブ生存（FAULT を返す）
+   │IRQ ─EXTI(top prio)──►  capture(L1-4) → bin → bundle(triple) ──DMA──► poll
+   └ 500 kHz-tuned antenna     │ SysTick clock / IWDG / health(VDD)
+                               └ slave survives faults (returns FAULT)
 ```
 
-役割：**CH32V003＝即時捕捉・保持**、**ESP32＝N秒ごとにまとめて回収**。
-例）1秒に0.2s間隔で5件 → 次ポーリングで5件まとめて取得。
+Roles: **CH32V003 = capture & hold immediately**, **ESP32 = collect in batches every N seconds**.
+e.g. 5 events at 0.2 s spacing within 1 s → fetched together on the next poll.
 
 ---
 
-## リポジトリ構成
+## Repository layout
 
 ```
 TinyWetherMemo/
-├─ README.md                 # 本書
-├─ TESTLOG.md                # 実機テスト結果（簡易ログ）
-├─ LICENSE
-├─ Docs/                     # 設計・仕様
-│   ├─ README.md              # 設計根拠
-│   ├─ SPEC.md                # 詳細仕様
-│   ├─ I2C_REFERENCE.md       # I2C コマンド仕様
-│   └─ SOP8PinOut.txt
-├─ firmware/                 # CH32V003 ファーム（ch32fun / PlatformIO）  ★PIOプロジェクト
-│   ├─ *.c / *.h              # モジュール（config/protocol/capture/bundle/...）
+├─ README.md / README_JP.md   # this document (EN / JP)
+├─ LICENSE                     # custom non-commercial license
+├─ TESTLOG.md                  # bench test results (bridge)
+├─ Docs/                       # design & spec
+│   ├─ README.md               # design rationale
+│   ├─ SPEC.md                 # detailed spec
+│   ├─ I2C_REFERENCE.md        # I2C command spec
+│   ├─ SOP8PinOut.txt
+│   └─ TEST_LOG/               # dated on-device test logs
+├─ firmware/                   # CH32V003 firmware (ch32fun / PlatformIO)  ★PIO project
+│   ├─ *.c / *.h               # modules (config/protocol/capture/bundle/...)
 │   ├─ Makefile / platformio.ini / funconfig.h / BUILD.md
-├─ host_esp32c3/             # ESP32-C3 ホストアプリ「WetherLoggerBox」  ★PIOプロジェクト
-│   ├─ platformio.ini         # env:esp32c3  (pio run / pio run -t upload)
-│   ├─ src/                   # main / io_task(RTOS) / sensors / lightning / wifi / oled
-│   ├─ lib/ThunderSense/      # 本リポジトリ arduino/ 版ホストライブラリを同梱
-│   └─ Docs/                  # ARCHITECTURE / SENSORS / LIGHTNING
-└─ arduino/ThunderSense/     # ESP32 ホストライブラリ（配布用の元）
-    ├─ ThunderSense.h / .cpp  # ← .h を読めば使い方が分かる
+├─ host_esp32c3/               # ESP32-C3 host app "WetherLoggerBox"  ★PIO project
+│   ├─ README.md / README_JP.md   (EN / JP)
+│   ├─ platformio.ini          # env:esp32c3  (pio run / pio run -t upload)
+│   ├─ src/                    # main / io_task(RTOS) / sensors / lightning / wifi / oled
+│   ├─ lib/ThunderSense/       # bundles this repo's arduino/ host library
+│   └─ Docs/                   # ARCHITECTURE / SENSORS / LIGHTNING / ScreenShots
+└─ arduino/ThunderSense/       # ESP32 host library (source of the distributable)
+    ├─ ThunderSense.h / .cpp   # ← read the .h to learn the API
     └─ examples/ReadLightning/
 ```
-> 秋月 AE-AS3935 のデモ資料は開発時の参考のみで、本リポジトリには再配布しません（[LICENSE](LICENSE) 三者表記）。
+> The Akizuki AE-AS3935 demo material was used only for reference during development and is **not** redistributed here (see the LICENSE third-party notices).
 
-> **2 つの PlatformIO プロジェクト**が同居: `firmware/`（CH32V003 ブリッジ, `platform=ch32v`）と
-> `host_esp32c3/`（ESP32-C3 ロガー, `platform=pioarduino`）。各フォルダで `pio run` / `pio run -t upload`。
+> **Two PlatformIO projects** live side by side: `firmware/` (CH32V003 bridge, `platform=ch32v`) and `host_esp32c3/` (ESP32-C3 logger, `platform=pioarduino`). Run `pio run` / `pio run -t upload` in each folder.
 
-### ホストアプリ WetherLoggerBox の主機能（詳細 → [host_esp32c3/README.md](host_esp32c3/README.md)）
-- **RTOS**: ioTask が I2C 単独所有（雷+センサ+校正）、loopTask が WiFi/Web/FS。`g_state`(mutex) で受渡し。
-- **6ページ Web SPA**（ダッシュボード/チャート/WiFi/雷校正/オフセット/データ）。gzip 配信・自己スケジュールポーリング。
-- **チャート**: ライブ/分足/時間足/日/週/月（**Chart.js ローカル同梱=CDN非依存**）。時足以降は FS 長期履歴。
-- **認証**: ログイン(SHA-256+RNG, Cookie) + パスワード変更、SoftAP WPA2、設定パスワード AES 暗号化。
-- **HTTPS(443) 併設**（自己署名 EC P-256）+ HTTP(80)。httpd 移植。
-- **データ**: LittleFS へ CSV(`time,temp,humi,thunder`, NTP時刻/オフライン救済) + 時足を FS 永続化。int16 圧縮。
-- **信頼性/省電力**: タスクWDT、メッシュ BSSID ロック+再ローミング、RTC 時刻保持、WiFiモデムスリープ + CPU 80MHz。
-- パーティション: 4MB を app 1.375MB / FS(LittleFS) 2.5MB / coredump 64KB。
+### Host app "WetherLoggerBox" — main features (details → [host_esp32c3/README.md](host_esp32c3/README.md))
+- **RTOS**: ioTask owns I2C exclusively (lightning + sensors + calibration); loopTask does WiFi/Web/FS. Hand-off via `g_state` (mutex).
+- **Web SPA (7 pages)**: Home / Chart / WiFi / Lightning calibration / Offset / Data / **Settings** — hamburger menu, responsive, dark/light. **Bilingual UI: English default, Japanese selectable** (in Settings). gzip-served, self-scheduling polling.
+- **Chart**: live / 1-min / hourly / day / week / month (**Chart.js bundled locally = no CDN, works offline**). Hourly+ come from FS long-term history; hidden series stay hidden across live updates.
+- **Auth**: login (SHA-256 + RNG, cookie) + password change; setup SoftAP is WPA2; the stored WiFi password is AES-256 encrypted.
+- **WiFi**: **AP and STA are mutually exclusive** (never both up at once — LAN-exposure safety); STA falls back to AP if it cannot connect.
+- **HTTPS(443) alongside HTTP(80)** (self-signed EC P-256), via `esp_http_server` (httpd).
+- **Data**: CSV to LittleFS (`time,temp,humi,thunder`, NTP time / offline rescue) + long-term history persisted to FS with int16 compression.
+- **Reliability / power**: task WDT, mesh BSSID lock + re-roaming, RTC time retention, WiFi modem sleep + 80 MHz CPU.
+- Partitions: 4 MB → app 1.375 MB / FS(LittleFS) 2.5 MB / coredump 64 KB.
 
 ---
 
-## ハードウェア（ピン配線）
+## Hardware (pinout)
 
-CH32V003J4M6 SOP-8（データシート準拠）。**5信号＋SWIO**でちょうど収まる。
+CH32V003J4M6 SOP-8 (per datasheet). **5 signals + SWIO** fit exactly.
 
-| 物理Pin | ポート | 用途 |
+| Pin | Port | Use |
 |---|---|---|
 | 1 | PA1 | SW-I2C **SCL** → AS3935 |
 | 3 | PA2 | SW-I2C **SDA** → AS3935 |
-| 5 | PC1 | HW-I2C1 **SDA**（上位バス） |
-| 6 | PC2 | HW-I2C1 **SCL**（上位バス） |
-| 7 | PC4 | AS3935 **IRQ**（EXTI / T1CH4 校正兼用） |
-| 8 | PD1 | SWIO（書込専用） |
-| 2 / 4 | VSS / VDD | GND / 3.3V |
+| 5 | PC1 | HW-I2C1 **SDA** (upstream bus) |
+| 6 | PC2 | HW-I2C1 **SCL** (upstream bus) |
+| 7 | PC4 | AS3935 **IRQ** (EXTI / also T1CH4 for calibration) |
+| 8 | PD1 | SWIO (programming only) |
+| 2 / 4 | VSS / VDD | GND / 3.3 V |
 
-- AS3935 モジュールに 10kΩ プルアップあり（SW-I2C 側）。外部 XTAL 不可 → 内蔵 HSI 運用。
-- 予備 GPIO ゼロ（ハード電源断が要るなら TSSOP20 検討）。
+- The AS3935 module has a 10 kΩ pull-up (SW-I2C side). No external crystal → internal HSI.
+- Zero spare GPIO (consider TSSOP20 if you need a hardware power-down line).
 
 ---
 
-## クイックスタート
+## Quick start
 
-### 1) ファーム（CH32V003）
+### 1) Firmware (CH32V003)
 
-依存：`riscv-none-elf-gcc`、[ch32fun](https://github.com/cnlohr/ch32fun)、WCH-LinkE。詳細は [firmware/BUILD.md](firmware/BUILD.md)。
+Dependencies: `riscv-none-elf-gcc`, [ch32fun](https://github.com/cnlohr/ch32fun), WCH-LinkE. Details in [firmware/BUILD.md](firmware/BUILD.md).
 
 ```bash
-# Makefile（検証済）
+# Makefile (verified)
 cd firmware
-make main.bin CH32FUN=/path/to/ch32fun/ch32fun     # ビルド
-# 書込は minichlink 推奨（PlatformIO同梱OpenOCDが古く未対応の環境あり）
+make main.bin CH32FUN=/path/to/ch32fun/ch32fun     # build
+# flashing via minichlink (the OpenOCD bundled with PlatformIO is old on some setups)
 /path/to/ch32fun/minichlink/minichlink.exe -w .../main.bin flash -b
 ```
 
-PlatformIO の場合は `firmware/ch32fun` に ch32fun を symlink/コピー後 `pio run`（[BUILD.md](firmware/BUILD.md)）。
-デバッグは `config.h` の `#define DEBUG 1` で SDI コンソール出力（`minichlink -T` で観測）。
+For PlatformIO, symlink/copy ch32fun as `firmware/ch32fun`, then `pio run` (see [BUILD.md](firmware/BUILD.md)).
+For debug output, `#define DEBUG 1` in `config.h` (SDI console, observe with `minichlink -T`).
 
-### 2) ホスト（ESP32）
+Clock is **48 MHz by default** (verified on hardware). A 24 MHz (HSI-direct, PLL off) low-power option exists — see `firmware/funconfig.h` / `config.h` `SYS_CLK_HZ`; the measured saving is only ~1.8 mA (7.0 → 5.2 mA), so 48 MHz is kept for stability.
 
-`arduino/ThunderSense` を Arduino の `libraries/` へ。
+### 2) Host (ESP32)
+
+Copy `arduino/ThunderSense` into your Arduino `libraries/`.
 
 ```cpp
 #include <Wire.h>
@@ -131,7 +132,7 @@ ThunderSense ts;
 void setup(){ Wire.begin(); ts.begin(Wire); ts.syncTime(unixEpoch); }
 void loop(){
   TSEvent ev[TS_MAX_EVENTS];
-  int n = ts.poll(ev, TS_MAX_EVENTS);          // 受信＋CRC検証＋ACK
+  int n = ts.poll(ev, TS_MAX_EVENTS);          // receive + CRC verify + ACK
   for(int i=0;i<n;i++) if(ev[i].isLightning())
     Serial.printf("%u km, e=%lu\n", ev[i].distanceKm, ev[i].energy);
 }
@@ -139,46 +140,42 @@ void loop(){
 
 ---
 
-## テスト結果（要約）
+## Test results (summary)
 
-実機（AS3935 センサ側）検証済み。詳細ログ → [TESTLOG.md](TESTLOG.md)。
+Verified on hardware. Detailed logs → [TESTLOG.md](TESTLOG.md) and [Docs/TEST_LOG/](Docs/TEST_LOG/).
 
-- ビルド：Makefile / PlatformIO とも SUCCESS（**FLASH 55% / RAM 66%**、triple/32＋全機能、DEBUG=0）
-- SW-I2C 通信確立、AS3935 応答（アドレス **0x00**、reg0x00=0x24）
-- LCO 校正成功（**TUN_CAP=4**）→ option-byte 保存 → 次回起動でロード（高速起動）
-- **スパーク試験**：電子ライターで **disturber を検出**（雷ではなく妨害波と正しく分類）
-- IWDG・起動シーケンス・多重防御・フェイルセーフ動作確認
+- Build: SUCCESS with both Makefile and PlatformIO (**Flash 55% / RAM 66%**, triple/32 + all features, DEBUG=0).
+- SW-I2C link established, AS3935 responds (address **0x00**, reg0x00=0x24).
+- LCO calibration succeeds → TUN_CAP saved to option byte → loaded on next boot (fast start).
+- Upstream HW-I2C slave verified: the ESP32-C3 reads status(12 B) / bundle(389 B, poll) with ACK.
+- **Detection chain verified**: sparking an electronic lighter reliably increments the event counters through the full path (AS3935 → CH32V003 → I2C → ESP32 → Web). Note that the **classification depends on the source** — a strong/shielded electronic-lighter spark registers as *noise*, not a *disturber* (this is inherent AS3935 behavior, not a fault). See [Docs/TEST_LOG/WetherLoggerBox_2026-09-13.md](Docs/TEST_LOG/WetherLoggerBox_2026-09-13.md).
+- **Data integrity under WiFi loss proven**: while the host was briefly unreachable, the CH32V003 kept capturing and the event count continued climbing; nothing was lost on recovery (the bridge buffers + FS persistence are independent of WiFi).
 
-**上位 HW-I2C スレーブ側も検証済み(2026-09)**：ESP32-C3 から status(12B) / bundle(389B, poll) の
-読取・ACK が通り、スパークで妨害波カウントが増加することを確認。
-> ⚠ 大容量 bundle(389B) 読取は ESP 側の既定 I2C タイムアウト(~50ms) では timeout(Error263) するため、
-> ホスト側で `Wire.setTimeOut(400)` + 「status で pending>0 の時だけ bundle を読む」最適化を実施
-> （詳細は [host_esp32c3](host_esp32c3/README.md) の該当節）。
+> ⚠ Large bundle(389 B) reads time out (Error263) under the ESP-side default I2C timeout (~50 ms), so the host uses `Wire.setTimeOut(400)` + "read the bundle only when status shows pending>0". Details in [host_esp32c3](host_esp32c3/README.md).
 
-> ⚠ **CH32V003 書込み注意**：WCH-LinkE ファーム **v2.17** と PIO/ch32fun 同梱 minichlink の
-> 組み合わせで、`Interface Setup` 後に `Error sending WCH command` で書込みが停止する事象を確認
-> （読取り/haltは可・バイナリ無関係）。**WCH-LinkUtility(公式GUI)** で `firmware.bin` を `0x08000000`
-> へ書くか、minichlink を最新版に更新して回避する。
+> ⚠ **CH32V003 flashing note**: an abnormal current on a shared power rail can disrupt WCH-LinkE programming (a real case here was traced to a **damaged host-side LDO** — replacing the module fixed both the flashing and the host's boot loops). With healthy power, WCH-LinkE v2.17 + minichlink flashes fine (`minichlink -w firmware.bin flash -b`).
 
 ---
 
-## ドキュメント
+## Documentation
 
-- [Docs/README.md](Docs/README.md) — 設計根拠（なぜブリッジ／スケジューリング哲学／多重防御）
-- [Docs/SPEC.md](Docs/SPEC.md) — 詳細仕様（構造体・状態機械・優先度・DMA・校正・健康度・フラッシュ・メモリ収支）
-- [Docs/I2C_REFERENCE.md](Docs/I2C_REFERENCE.md) — I2C コマンド仕様（全 14 コマンド）
-- [arduino/ThunderSense/ThunderSense.h](arduino/ThunderSense/ThunderSense.h) — ホスト API（自己文書化）
+- [Docs/README.md](Docs/README.md) — design rationale (why a bridge / scheduling philosophy / defense-in-depth)
+- [Docs/SPEC.md](Docs/SPEC.md) — detailed spec (structs, state machines, priorities, DMA, calibration, health, flash, memory budget)
+- [Docs/I2C_REFERENCE.md](Docs/I2C_REFERENCE.md) — I2C command spec (all 14 commands)
+- [Docs/TEST_LOG/](Docs/TEST_LOG/) — dated on-device test logs
+- [arduino/ThunderSense/ThunderSense.h](arduino/ThunderSense/ThunderSense.h) — host API (self-documenting)
+
+> The deeper Docs (SPEC / ARCHITECTURE / LIGHTNING / SENSORS / I2C_REFERENCE) are currently Japanese; English versions may follow.
 
 ---
 
-## ライセンス・クレジット
+## License & credits
 
-- 本プロジェクトのコード：**独自の非商用ライセンス**（[LICENSE](LICENSE)）。
-  **非商用に限り**利用・改変・再配布は自由。**無保証・作者免責**。
-  **配布・フォーク時は、作者連絡先 `ghostinkoma@gmail.com` と本リポジトリ URL
-  `https://github.com/ghostinkoma/TinyWetherMemo` の明記を義務**とします（[LICENSE](LICENSE) 第2条）。
-  商用利用は作者へ個別許諾を（OSI 承認のオープンソースではありません）。
-- 作者連絡先: ghostinkoma@gmail.com ／ リポジトリ: https://github.com/ghostinkoma/TinyWetherMemo
-- [ch32fun](https://github.com/cnlohr/ch32fun)（MIT）— CH32V003 ランタイム（本リポジトリには非同梱）
-- LCO 校正手順の出典：FreqCounter（Martin Nawrath, KHM LAB3, LGPL）※AVR コードは非移植、手順・目標値のみ流用
-- AE-AS3935 モジュールのデモ資料（秋月電子通商）は開発時の参考のみ。**本リポジトリには再配布しません**（原配布元 https://akizukidenshi.com/ の条件に従い入手のこと）。
+- Project code: a **custom non-commercial license** ([LICENSE](LICENSE)).
+  Free to use / modify / **fork / redistribute for non-commercial purposes**. **No warranty; the author accepts no liability.**
+  **On any redistribution or fork (modified or not), you must state the author `ghostinkoma` and this repository URL
+  `https://github.com/ghostinkoma/TinyWetherMemo`** (LICENSE §3). Commercial use requires the author's permission. (Not an OSI-approved open-source license.)
+- Author: ghostinkoma <ghostinkoma@gmail.com> · Repository: https://github.com/ghostinkoma/TinyWetherMemo
+- [ch32fun](https://github.com/cnlohr/ch32fun) (MIT) — CH32V003 runtime (not vendored here)
+- LCO calibration procedure adapted from FreqCounter (Martin Nawrath, KHM LAB3, LGPL) — AVR code not ported, only the procedure & target values reused.
+- AE-AS3935 module demo material (Akizuki Denshi Tsusho) was used only for reference during development and is **not redistributed here** (obtain it from the original distributor https://akizukidenshi.com/ under their terms).
