@@ -10,10 +10,11 @@
  * unused code is garbage-collected by the linker when DEBUG=0). */
 #define FUNCONF_USE_DEBUGPRINTF  1
 
-/* クロック: 既定は ch32fun 標準の 48MHz(HSI×PLL2)。実機はこれで稼働。
- * ―― 省電力オプション(保留): 下2行を有効化すると PLL停止で HSI直結 24MHz 駆動になり、
- *    雷IRQは常時捕捉のまま消費を下げられる。config.h の SYS_CLK_HZ も 24000000 に合わせること。
- *    ※ WCH-LinkE(v2.17)×同梱minichlink の書込非互換で未反映(WCH-LinkUtility等で書込可)。
+/* クロック: 既定 48MHz(HSI×PLL2)。実機検証済みの稼働値=安定性重視でこれを採用。
+ * ―― 省電力24MHz(PLL停止=HSI直結)は実機検証済み(2026-09-13, bridge動作OK)だが、消費差は
+ *    僅少(3.3V/全周辺ON: 48MHz=7.0mA vs 24MHz=5.2mA=+1.8mA。ESP32のWiFiに対し誤差)のため
+ *    48MHz固定を選択。24MHzにするには下2行を有効化し config.h SYS_CLK_HZ も 24000000u にする
+ *    (HW-I2C FREQ / SysTick が SYS_CLK_HZ 依存、ch32fun Delay は本値依存)。
  * #define FUNCONF_USE_PLL           0
  * #define FUNCONF_SYSTEM_CORE_CLOCK 24000000
  */

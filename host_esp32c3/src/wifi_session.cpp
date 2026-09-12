@@ -32,6 +32,12 @@ void WifiSession::begin(const char* ssid, const char* pass) {
   startConnect(millis());
 }
 
+void WifiSession::disable() {
+  WiFi.disconnect(true, false);   // STA を切断 (AP は触らない)
+  _state = ST_DISABLED;
+  _timeValid = false;
+}
+
 void WifiSession::startConnect(uint32_t now) {
   WiFi.disconnect(false, true);   // 前回セッションを掃除 (STAは維持)
 

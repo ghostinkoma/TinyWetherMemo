@@ -24,6 +24,25 @@ static bool     g_bootPatched = false;   // NTP初確定時に起動相対ログ
 static uint16_t g_lastLogSeq = 0;        // FSへ永続化した分足シーケンス
 static bool     g_logSeqInit = false;
 
+// ---- WiFi 動作モード (AP と STA を排他運用: AquaController 準拠) ----
+bool            g_apMode = false;        // 現在 AP 単独運用か (web_ui が参照)
+static bool     g_wantSta = false;       // 起動時に STA を選択したか
+static bool     g_everConnected = false; // STA が一度でも接続できたか
+static uint32_t g_wifiBootMs = 0;        // STA 起動時刻 (フォールバック判定用)
+
+// AP 単独運用へ (STA は上げない)。WiFi を一旦 OFF にしてから AP を確実に起動する。
+static void startApMode() {
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF); delay(100);
+  WiFi.mode(WIFI_AP);  delay(100);
+  WiFi.setSleep(false);
+  bool ok = (strlen(WLB_AP_PASS) >= 8) ? WiFi.softAP(WLB_AP_SSID, WLB_AP_PASS)   // WPA2
+                                       : WiFi.softAP(WLB_AP_SSID);                // open
+  g_apMode = true;
+  Serial.printf("[net] AP-only '%s' (WPA2=%d) ok=%d http://%s/\n",
+                WLB_AP_SSID, strlen(WLB_AP_PASS) >= 8, ok, WiFi.softAPIP().toString().c_str());
+}
+
 void setup() {
   Serial.begin(115200);
   setCpuFrequencyMhz(WLB_CPU_MHZ);   // 省電力: 160→80MHz (WiFi は80MHz以上必須)
@@ -43,24 +62,22 @@ void setup() {
   histfs_seed();         // FS長期履歴(時足)をRAM時足リングへ復元 → 再起動後も日/週/月足が即描画
   iotask_start();        // IOタスク (雷+センサ, I2C所有)
 
-  // WiFi: NTP確定で I2C書込(syncTime)は IO へ依頼
+  // WiFi: AP と STA を同時に上げない (AquaController 準拠 = 上位LANの露出を避ける)。
+  //   staMode==STA かつ SSID 有り → STA 単独。それ以外 (AP 指定/SSID 空) → AP 単独。
+  //   STA が WLB_STA_FALLBACK_MS 内に一度も繋がらなければ AP へフォールバック(到達性確保)。
   net.onTime([](uint32_t epoch){ g_state.requestTimeSync(epoch); });
   net.setNtp(WLB_NTP_SERVER, WLB_TZ_OFFSET_S);
-  net.begin(g_settings.ssid, g_settings.pass);   // 空/AP運用なら STA は DISABLED
 
-#if WLB_ENABLE_SOFTAP
-  // SoftAP 常設 (設定用・PWなし)。STA が繋がらなくても必ず到達可能。
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.setSleep(WLB_WIFI_MODEM_SLEEP ? true : false);   // true=WIFI_PS_MIN_MODEM(省電力)/false=常時ON
-  if (strlen(WLB_AP_PASS) >= 8) WiFi.softAP(WLB_AP_SSID, WLB_AP_PASS);   // WPA2
-  else                          WiFi.softAP(WLB_AP_SSID);                 // open (PW未設定時)
-  Serial.printf("[net] AP '%s' (WPA2=%d) http://%s/\n", WLB_AP_SSID, strlen(WLB_AP_PASS)>=8, WiFi.softAPIP().toString().c_str());
-#else
-  // 切り分け: softAP を無効化し STA 単独運用 (同一ch同居 deauth 仮説の検証)。
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  Serial.println("[net] STA-only (softAP disabled)");
-#endif
+  g_wantSta = (g_settings.staMode == 1) && (g_settings.ssid[0] != '\0');
+  if (g_wantSta) {
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(WLB_WIFI_MODEM_SLEEP ? true : false);   // true=WIFI_PS_MIN_MODEM(省電力)/false=常時ON
+    net.begin(g_settings.ssid, g_settings.pass);           // STA 単独 (softAP は上げない)
+    g_wifiBootMs = millis();
+    Serial.printf("[net] STA-only -> '%s' (AP は起動しない)\n", g_settings.ssid);
+  } else {
+    startApMode();                                          // AP 単独 (STA は起動しない)
+  }
 
   webui_begin(g_settings);   // Web(:80) + mDNS(settings.mdns)
 }
@@ -70,8 +87,21 @@ void loop() {
 #if WLB_ENABLE_WDT
   esp_task_wdt_reset();          // WDT feed (loopTask)
 #endif
-  net.loop(now);
+  if (!g_apMode) net.loop(now);      // AP 単独運用中は STA セッションを回さない (排他)
   webui_loop();
+
+  if (net.isConnected()) g_everConnected = true;
+
+  // STA が一度も繋がらないまま WLB_STA_FALLBACK_MS 経過 → AP へフォールバック (到達性確保)。
+  // AP へ切替後は STA セッションを停止し、AP と STA を同時に上げない状態を保つ。
+#if WLB_ENABLE_SOFTAP
+  if (g_wantSta && !g_apMode && !g_everConnected &&
+      (uint32_t)(now - g_wifiBootMs) > WLB_STA_FALLBACK_MS) {
+    Serial.println("[net] STA が接続できないため AP へフォールバック");
+    net.disable();                   // STA を停止 (排他)
+    startApMode();                   // AP 単独へ
+  }
+#endif
 
   NetStatus ns; ns.connected = net.isConnected();
   ns.rssi = (int8_t)net.rssi(); ns.timeValid = net.timeValid();

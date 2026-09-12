@@ -92,7 +92,13 @@
 #define WLB_ENABLE_WDT    1        // タスクウォッチドッグ
 #define WLB_ENABLE_ROAM   1        // メッシュ再ローミング
 #define WLB_ENABLE_LN     1        // 雷poll(ln.tick)
-#define WLB_ENABLE_SOFTAP 1        // 常設softAP(設定用)
+#define WLB_ENABLE_SOFTAP 1        // AP フォールバックを許可 (STA 接続失敗時のみ AP を起動)
+
+// ---- WiFi 動作モード (AquaController 準拠: AP と STA を同時に上げない) ----
+//  セキュリティ: AP+STA 併存は上位 LAN を AP 経由で晒すため、排他運用する。
+//  起動時 staMode(設定) が STA かつ SSID 有り → STA 単独。SSID 無し/AP 指定 → AP 単独。
+//  STA が下記時間内に一度も接続できなければ AP へフォールバック(到達性確保, WLB_ENABLE_SOFTAP=1時)。
+#define WLB_STA_FALLBACK_MS  60000   // STA 起動後この時間つながらねば AP フォールバック [ms]
 
 // ---- メッシュ再ローミング (接続後もRSSIを監視し強いAPへ張り替え) ----
 //  起動時スキャンが遠APを掴んだ場合の自己復帰。閾値割れ時のみスキャンし負荷を抑える。

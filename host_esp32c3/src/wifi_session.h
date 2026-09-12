@@ -40,6 +40,9 @@ public:
   // 資格情報を渡して開始 (接続はブロックせず loop() で進む)。
   void begin(const char* ssid, const char* pass);
 
+  // STA を停止し ST_DISABLED へ (AP フォールバック時など、STA/AP 排他運用のために)。
+  void disable();
+
   // 毎ループ呼ぶ。now は millis()。状態遷移・再接続・NTP を進める。
   void loop(uint32_t now);
 
