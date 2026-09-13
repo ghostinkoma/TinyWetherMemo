@@ -31,3 +31,5 @@ host_esp32c3/src/cert_pem.h
 # ログイン認証ハッシュ (デバイス実行時生成) / 実行時設定
 **/auth.ini
 **/settings.ini
+# 引き継ぎメモ (実IP/MAC/COM/既定資格情報など運用機密を含む=公開しない)
+/DISPATCH.md
