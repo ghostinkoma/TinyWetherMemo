@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # ============================================================================
-#  public/api/devices.py  -  端末一覧 + 直近件数 (ダッシュボード)  [CGI]
-#  GET (要ログイン) → {devices:[{mac,name,counts:{temp,humidity,lightning},last}]}
-#  ・admin(role3)=全端末 / それ以外=user_device_perm で許可された端末のみ。
-#  ・現行テーブルのみ参照 (=最新)。履歴は含めない。
+#  public/api/mydevices.py  -  端末登録・変更 用の一覧 (要ログイン, ゲスト不可)
+#  GET → {devices:[{mac, name, guest_public}]}
 # ============================================================================
 import os
 import sys
@@ -16,14 +14,17 @@ from logic.db import get_conn                    # noqa: E402
 
 def main():
     webio.require_https_or_die()
-    session = webio.require_session_or_die()
+    s = webio.require_session_or_die()
+    if int(s.get("role", 0)) < repo.ROLE_ADD:    # guest(-1)/参照(0) は登録変更不可
+        webio.send_json({"error": "forbidden"}, 403)
     conn = get_conn()
     try:
-        webio.gate(conn, event="page", user_id=session.get("uid"))
-        devs = repo.dashboard_devices(conn, session)
+        webio.gate(conn, event="page", user_id=s["uid"])
+        rows = repo.my_devices(conn, s)
     finally:
         conn.close()
-    webio.send_json({"devices": devs})
+    webio.send_json({"devices": [{"mac": r["mac"], "name": r["device_name"],
+                                  "guest_public": int(r["guest_public"])} for r in rows]})
 
 
 try:

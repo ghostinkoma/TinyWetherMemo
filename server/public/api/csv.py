@@ -23,12 +23,15 @@ def _csv_field(v):
 def main():
     webio.require_https_or_die()
     session = webio.require_session_or_die()   # 未ログインは 401(JSON) で弾く
+    if int(session.get("role", 0)) == repo.ROLE_GUEST:   # ゲストはCSV不可
+        webio.send_json({"error": "forbidden"}, 403)
     mac = tokens.normalize_mac(webio.query().get("mac", ""))
     if not mac:
         webio.send_json({"error": "bad_mac"}, 400)
 
     conn = get_conn()
     try:
+        webio.gate(conn, event="page", user_id=session.get("uid"))
         if not repo.can_view(conn, session, mac):
             webio.send_json({"error": "forbidden"}, 403)
         rows = repo.csv_rows(conn, mac)

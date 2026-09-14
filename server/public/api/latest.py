@@ -20,6 +20,7 @@ def main():
         webio.send_json({"error": "bad_mac"}, 400)
     conn = get_conn()
     try:
+        webio.gate(conn)                          # BAN照合のみ(高頻度pollはログ除外)
         if not repo.can_view(conn, session, mac):
             webio.send_json({"error": "forbidden"}, 403)
         latest = repo.latest_all(conn, mac)

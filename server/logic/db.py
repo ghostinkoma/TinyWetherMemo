@@ -21,14 +21,16 @@ TABLES = {
     "users": {
         "pk": ["user_id"],
         "cols": ["user_id", "username", "email", "password_hash", "role",
-                 "parent_user_id", "billing_confirmed"] + _COMMON_TAIL,
+                 "parent_user_id", "billing_confirmed",
+                 "activated", "activation_code_hash", "activation_expires"] + _COMMON_TAIL,
         "history": "users_history",
     },
     "devices": {
         "pk": ["mac"],
         "cols": ["mac", "device_name", "owner_user_id", "start_date",
                  "temp_sensor", "temp_offset", "humi_sensor", "humi_offset",
-                 "ln_sensor", "ln_config", "info_updated_at", "last_data_at"] + _COMMON_TAIL,
+                 "ln_sensor", "ln_config", "info_updated_at", "last_data_at",
+                 "guest_public", "activation_key_hash", "activated", "activation_expires"] + _COMMON_TAIL,
         "history": "devices_history",
     },
     "user_device_perm": {

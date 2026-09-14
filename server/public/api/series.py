@@ -33,6 +33,7 @@ def main():
     since_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(int(time.time()) - hours * 3600))
     conn = get_conn()
     try:
+        webio.gate(conn)                          # BAN照合のみ
         if not repo.can_view(conn, session, mac):
             webio.send_json({"error": "forbidden"}, 403)
         pts = repo.series(conn, mac, metric, key, since_dt)

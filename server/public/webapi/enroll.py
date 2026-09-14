@@ -22,8 +22,6 @@ def main():
     code = str(body.get("code", ""))
     if not mac:
         webio.send_json({"error": "bad_mac"}, 400)
-    if not tokens.verify_enroll_code(code):
-        webio.send_json({"error": "bad_code"}, 401)
 
     name = str(body["name"])[:64] if body.get("name") is not None else None
     start = None
@@ -32,8 +30,17 @@ def main():
 
     conn = get_conn()
     try:
-        repo.enroll_device(conn, mac, name, start)
+        webio.gate(conn, event="enroll", mac=mac)   # 禁止端末/IPを遮断 + ログ
+        # per-device アクティベートキー(優先) / 共有 enroll_code(移行fallback) を検証
+        if not repo.enroll_verify(conn, mac, code):
+            conn.rollback()
+            webio.send_json({"error": "bad_code"}, 401)
+        if name is not None or start is not None:
+            repo.enroll_device(conn, mac, name, start)
         conn.commit()
+    except SystemExit:
+        conn.rollback()
+        raise
     except Exception:
         conn.rollback()
         webio.send_error("db")

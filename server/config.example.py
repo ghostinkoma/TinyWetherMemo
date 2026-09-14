@@ -32,4 +32,18 @@ CONFIG = {
     # ---- 動作 ----
     "require_https": True,               # 本番 True 推奨 (API/ログインを HTTPS 必須)
     "pbkdf2_iterations": 200000,
+
+    # メール内リンクの土台
+    "base_url": "https://YOUR_DOMAIN",
+
+    # ---- SMTP (ロリポップ) ----
+    "smtp": {
+        "host": "smtp.lolipop.jp",
+        "port": 465,
+        "ssl": True,
+        "user": "YOUR_MAIL@YOUR_DOMAIN",
+        "password": "YOUR_MAIL_PASSWORD",
+        "from": "YOUR_MAIL@YOUR_DOMAIN",
+        "from_name": "WetherLoggerBox",
+    },
 }

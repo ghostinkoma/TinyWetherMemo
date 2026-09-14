@@ -305,3 +305,50 @@ CREATE TABLE IF NOT EXISTS `data_lightning_history` (
   PRIMARY KEY (`h_id`),
   KEY `idx_lh_key` (`mac`, `sensor_key`, `daytime`, `version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ===========================================================================
+--  v1.0 セキュリティ/ゲスト/アクティベート 追加 (新規インストールもここまで実行)
+--  ※既存DBは db/migrate_2026-09-14_v1_security.sql を適用。
+-- ===========================================================================
+ALTER TABLE `devices`
+  ADD COLUMN `guest_public`        TINYINT(1)   NOT NULL DEFAULT 0,
+  ADD COLUMN `activation_key_hash` VARCHAR(255) NULL,
+  ADD COLUMN `activated`           TINYINT(1)   NOT NULL DEFAULT 1,
+  ADD COLUMN `activation_expires`  DATETIME     NULL,
+  ADD KEY `idx_devices_guest` (`guest_public`);
+ALTER TABLE `devices_history`
+  ADD COLUMN `guest_public`        TINYINT(1)   NOT NULL DEFAULT 0,
+  ADD COLUMN `activation_key_hash` VARCHAR(255) NULL,
+  ADD COLUMN `activated`           TINYINT(1)   NOT NULL DEFAULT 1,
+  ADD COLUMN `activation_expires`  DATETIME     NULL;
+ALTER TABLE `users`
+  ADD COLUMN `activated`            TINYINT(1)   NOT NULL DEFAULT 1,
+  ADD COLUMN `activation_code_hash` VARCHAR(255) NULL,
+  ADD COLUMN `activation_expires`   DATETIME     NULL;
+ALTER TABLE `users_history`
+  ADD COLUMN `activated`            TINYINT(1)   NOT NULL DEFAULT 1,
+  ADD COLUMN `activation_code_hash` VARCHAR(255) NULL,
+  ADD COLUMN `activation_expires`   DATETIME     NULL;
+
+CREATE TABLE IF NOT EXISTS `access_log` (
+  `log_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `user_id` BIGINT UNSIGNED NULL,
+  `mac` CHAR(17) NULL, `ip` VARCHAR(45) NOT NULL, `fwd_ip` VARCHAR(45) NULL,
+  `os` VARCHAR(32) NULL, `browser` VARCHAR(32) NULL, `user_agent` VARCHAR(255) NULL,
+  `method` VARCHAR(8) NULL, `path` VARCHAR(128) NULL, `event` VARCHAR(24) NULL,
+  `status` SMALLINT NULL, `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`log_id`), KEY `idx_al_ip` (`ip`), KEY `idx_al_time` (`created_at`),
+  KEY `idx_al_user` (`user_id`), KEY `idx_al_event` (`event`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `banned_ip` (
+  `ip` VARCHAR(45) NOT NULL, `reason` VARCHAR(128) NULL, `created_by` BIGINT UNSIGNED NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `banned_device` (
+  `mac` CHAR(17) NOT NULL, `reason` VARCHAR(128) NULL, `created_by` BIGINT UNSIGNED NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`mac`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `ip_geo_cache` (
+  `ip` VARCHAR(45) NOT NULL, `country` VARCHAR(64) NULL, `isp` VARCHAR(128) NULL,
+  `org` VARCHAR(128) NULL, `asn` VARCHAR(64) NULL,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

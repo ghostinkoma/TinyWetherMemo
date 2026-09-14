@@ -32,6 +32,50 @@ def query():
     return {k: v[0] for k, v in d.items()}
 
 
+# ---- クライアント識別 / UA 判定 ----
+def client_ip():
+    xff = os.environ.get("HTTP_X_FORWARDED_FOR", "")
+    if xff:
+        return xff.split(",")[0].strip()[:45]
+    return (os.environ.get("REMOTE_ADDR", "") or "")[:45]
+
+
+def parse_ua(ua):
+    u = (ua or "").lower()
+    os_ = ("Android" if "android" in u else
+           "iOS" if ("iphone" in u or "ipad" in u) else
+           "Windows" if "windows" in u else
+           "macOS" if ("macintosh" in u or "mac os" in u) else
+           "Linux" if "linux" in u else "Other")
+    br = ("Edge" if "edg/" in u else
+          "Chrome" if ("chrome" in u or "crios" in u) else
+          "Firefox" if "firefox" in u else
+          "Safari" if "safari" in u else
+          "curl" if "curl" in u else
+          "python" if ("python" in u or "requests" in u) else "Other")
+    return os_, br
+
+
+def gate(conn, event=None, user_id=None, mac=None):
+    """全 /api・/webapi 入口で呼ぶ: banned_ip / banned_device を照合し該当は 403。
+       event を渡すとアクセスログに1行記録する(認証/ページ/管理/enroll 等)。
+       conn は呼び出し側の接続を再利用。ban/log 失敗はリクエストを止めない(可用性優先)。"""
+    from . import repo
+    ip = client_ip()
+    try:
+        if repo.ip_banned(conn, ip) or (mac and repo.device_banned(conn, mac)):
+            repo.log_access(conn, None, mac, ip, "blocked", 403)
+            conn.commit()
+            send_json({"error": "forbidden"}, 403)
+        if event:
+            repo.log_access(conn, user_id, mac, ip, event, 200)
+            conn.commit()
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+
+
 def read_body():
     """JSON か form-urlencoded を dict で返す。"""
     try:
@@ -72,7 +116,8 @@ _STATUS = {200: "200 OK", 400: "400 Bad Request", 401: "401 Unauthorized",
 
 
 def send_json(obj, code=200, extra_headers=None):
-    body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    # default=str: datetime/Decimal 等を文字列化して安全にシリアライズ。
+    body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
     _emit(_STATUS.get(code, "200 OK"), body, extra_headers)
     sys.exit(0)
 
@@ -115,12 +160,20 @@ def require_session_or_die():
     return s
 
 
-def set_session_cookie(uid, role, name):
+def require_admin_or_die():
+    s = require_session_or_die()
+    if int(s.get("role", 0)) < 3:
+        send_json({"error": "forbidden"}, 403)
+    return s
+
+
+def set_session_cookie(uid, role, name, persistent=True):
+    # persistent=False は Max-Age を付けない=セッションCookie(ブラウザ終了で消滅)。ゲスト用。
     val = make_session(uid, role, name)
     secure = "; Secure" if cfg().get("require_https") else ""
-    ttl = int(cfg().get("session_ttl_sec", 86400))
-    return "Set-Cookie: {}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}{}".format(
-        COOKIE_NAME, val, ttl, secure)
+    maxage = ("; Max-Age=%d" % int(cfg().get("session_ttl_sec", 86400))) if persistent else ""
+    return "Set-Cookie: {}={}; Path=/; HttpOnly; SameSite=Strict{}{}".format(
+        COOKIE_NAME, val, maxage, secure)
 
 
 def clear_session_cookie():

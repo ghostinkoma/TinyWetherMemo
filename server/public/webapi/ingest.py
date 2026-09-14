@@ -28,6 +28,7 @@ def main():
 
     conn = get_conn()
     try:
+        webio.gate(conn, mac=mac)                 # 禁止端末/IPを遮断(高頻度のためログ無し)
         if not repo.device_is_active(conn, mac):
             webio.send_json({"error": "device_disabled"}, 403)
         n = repo.ingest_readings(conn, mac, body)
