@@ -86,6 +86,23 @@
 #define WLB_AUTH_SESSION_TTL_MS  86400000UL  // 24h スライディング
 #define WLB_AUTH_MIN_PASS_LEN 4
 
+// ---- SQLサーバ連携 既定 (config.local.h で上書き推奨。認証コードは秘密=公開リポジトリに置かない) ----
+//  これらは settings.h の初期値。起動後は設定UI/settings.ini が優先。
+//  config.local.h で WLB_SRV_ENABLE=1 / WLB_SRV_BASE / WLB_SRV_CODE を設定して書き込むと、
+//  UI操作なしで自動 enroll → 分足 PUSH が始まる (main.cpp の自動enroll)。
+#ifndef WLB_SRV_ENABLE
+  #define WLB_SRV_ENABLE 0                              // 0=スタンドアロン / 1=サーバ対応
+#endif
+#ifndef WLB_SRV_BASE
+  #define WLB_SRV_BASE   ""                             // 例 "https://your-domain.example"
+#endif
+#ifndef WLB_SRV_ROOT
+  #define WLB_SRV_ROOT   "/webapi"                      // 端末用WebAPIルート (人間UI /api と分離)
+#endif
+#ifndef WLB_SRV_CODE
+  #define WLB_SRV_CODE   ""                             // 認証コード(enroll_code)。config.local.h で設定
+#endif
+
 // ---- 機能トグル (通常は全て1。切り分け時のみ0にして原因を特定する) ----
 //  検証結果(2026-09-08): WiFiチャーン(数秒毎の再接続)は WDT/再ローム/雷poll の
 //  いずれをOFFにしても継続 → これらは原因でなく、AP側/環境要因と判明。全て1へ復帰。

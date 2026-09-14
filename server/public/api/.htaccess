@@ -1,0 +1,12 @@
+# api/ : Python を CGI として実行 (.py)。※ロリポップのPython設定に合わせ調整のこと。
+Options +ExecCGI
+AddHandler cgi-script .py
+
+# Authorization: Bearer をCGIへ渡す (一部環境は既定で落とす)。
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+# Apache 2.4.13+ なら下でも可 (どちらか有効な方が効けばよい)。
+<IfModule mod_cgi.c>
+  CGIPassAuth On
+</IfModule>

@@ -80,6 +80,11 @@ void settings_load(WlbSettings& s) {
     else if (k=="period") s.samplePeriodS= (uint16_t)v.toInt();
     else if (k=="avgN")   s.avgN         = (uint8_t)v.toInt();
     else if (k=="drop")   s.dropMinMax   = (uint8_t)v.toInt();
+    else if (k=="srvEn")  s.srvEnable    = (uint8_t)v.toInt();
+    else if (k=="srvBase")strlcpy(s.srvBase,  v.c_str(), sizeof s.srvBase);
+    else if (k=="srvRoot")strlcpy(s.srvRoot,  v.c_str(), sizeof s.srvRoot);
+    else if (k=="srvCode")strlcpy(s.srvCode,  v.c_str(), sizeof s.srvCode);
+    else if (k=="srvTok") strlcpy(s.srvToken, v.c_str(), sizeof s.srvToken);
     else if (k=="asIn")   s.asIndoor     = (uint8_t)v.toInt();
     else if (k=="asNf")   s.asNoiseFloor = (uint8_t)v.toInt();
     else if (k=="asWd")   s.asWatchdog   = (uint8_t)v.toInt();
@@ -105,6 +110,11 @@ void settings_save(const WlbSettings& s) {
   f.printf("period=%u\n", s.samplePeriodS);
   f.printf("avgN=%u\n",   s.avgN);
   f.printf("drop=%u\n",   s.dropMinMax);
+  f.printf("srvEn=%u\n",  s.srvEnable);
+  f.printf("srvBase=%s\n",sanitize(s.srvBase).c_str());
+  f.printf("srvRoot=%s\n",sanitize(s.srvRoot).c_str());
+  f.printf("srvCode=%s\n",sanitize(s.srvCode).c_str());
+  f.printf("srvTok=%s\n", sanitize(s.srvToken).c_str());
   f.printf("asIn=%u\n",   s.asIndoor);
   f.printf("asNf=%u\n",   s.asNoiseFloor);
   f.printf("asWd=%u\n",   s.asWatchdog);

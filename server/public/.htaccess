@@ -1,0 +1,10 @@
+# public/ : Webルート想定。既定文字コード + (任意)HTTPS強制。
+AddDefaultCharset UTF-8
+
+# SSL 有効化後に HTTPS へ強制リダイレクトしたい場合はコメントを外す:
+# <IfModule mod_rewrite.c>
+#   RewriteEngine On
+#   RewriteCond %{HTTPS} !=on
+#   RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+#   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>

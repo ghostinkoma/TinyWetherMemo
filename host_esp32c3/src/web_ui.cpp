@@ -14,6 +14,7 @@
 #include "histfs.h"
 #include "wifi_session.h"
 #include "auth.h"
+#include "server_sync.h"   // SQLサーバ連携 (enroll/push)
 #include "web_httpd.h"     // httpd を WebServer 風に扱うシム
 // 自己署名 EC P-256 証明書/鍵 (HTTPS)。実運用はデバイス固有の cert_pem.h (gitignore)
 // を tools/gen_cert.ps1 で生成。未生成(clone直後)は公開サンプルへフォールバックしビルド可。
@@ -210,6 +211,36 @@ static void handleWifiSet(HttpCtx& server) {
   server.send(200,"application/json","{\"ok\":1,\"reboot\":1}");
 }
 
+// ---- /api/server (サーバ連携設定 + enroll) ----
+static void handleServerGet(HttpCtx& server) {
+  if (!requireAuth(server)) return;
+  const WlbSettings& s=*g_set;
+  auto esc=[](String v){ v.replace("\\","\\\\"); v.replace("\"","\\\""); return v; };
+  String j="{";
+  j += "\"enable\":"+String(s.srvEnable);
+  j += ",\"base\":\""+esc(String(s.srvBase))+"\"";
+  j += ",\"root\":\""+esc(String(s.srvRoot))+"\"";
+  j += ",\"code\":\""+esc(String(s.srvCode))+"\"";
+  j += ",\"hasToken\":"+String(srv::hasToken()?1:0);
+  j += ",\"mac\":\""+srv::deviceMac()+"\"";
+  { String m=srv::lastMsg(); j += ",\"msg\":\""+esc(m)+"\""; }
+  j += "}";
+  server.send(200,"application/json; charset=utf-8",j);
+}
+
+static void handleServerSet(HttpCtx& server) {
+  if (!requireAuth(server)) return;
+  if (server.hasArg("enable")) g_set->srvEnable = server.arg("enable").toInt()?1:0;
+  if (server.hasArg("base"))   strlcpy(g_set->srvBase, server.arg("base").c_str(), sizeof g_set->srvBase);
+  if (server.hasArg("root"))   strlcpy(g_set->srvRoot, server.arg("root").c_str(), sizeof g_set->srvRoot);
+  if (server.hasArg("code"))   strlcpy(g_set->srvCode, server.arg("code").c_str(), sizeof g_set->srvCode);
+  // ★enroll(TLS) は httpd タスク(小スタック)では実行しない。loopTask の自動enroll に委ねる。
+  //   action=enroll でトークンを消して即再登録を促す(有効かつ未token→loopが30s内に登録)。
+  if (server.arg("action")=="enroll") g_set->srvToken[0] = '\0';
+  settings_save(*g_set);
+  server.send(200,"application/json","{\"ok\":1,\"hasToken\":"+String(srv::hasToken()?1:0)+"}");
+}
+
 // サーバ側クランプ (不正値がAS3935レジスタ/設定へ入るのを防ぐ)
 static long clampL(long v, long lo, long hi){ return v<lo?lo:(v>hi?hi:v); }
 
@@ -349,7 +380,7 @@ input[type=range]{flex:1;accent-color:var(--acc);height:22px}
 <a data-p=0 class=on data-i18n=nav.home>Home</a><a data-p=1 data-i18n=nav.chart>Chart</a>
 <a data-p=2 data-i18n=nav.wifi>WiFi</a><a data-p=3 data-i18n=nav.calib>Lightning calibration</a>
 <a data-p=4 data-i18n=nav.offset>Temp/Humidity offset</a><a data-p=5 data-i18n=nav.data>Data / logging</a>
-<a data-p=6 data-i18n=nav.settings>Settings</a>
+<a data-p=6 data-i18n=nav.settings>Settings</a><a data-p=7 data-i18n=nav.server>Server link</a>
 </nav>
 <main>
 <section class="on" id=p0>
@@ -486,6 +517,21 @@ input[type=range]{flex:1;accent-color:var(--acc);height:22px}
  <div class=note data-i18n=set.langnote>Choose the UI language. Saved on this device (browser).</div>
 </div>
 </section>
+<section id=p7>
+<div class=card><h2 data-i18n=srv.title>Server link (SQL)</h2>
+ <div class=row><label><input id=sen type=checkbox> <span data-i18n=srv.enable>Enable server mode (else standalone)</span></label></div>
+ <div class=row><label data-i18n=srv.base>Base URL</label><input id=sbase style=flex:1 placeholder="https://your-domain.example"></div>
+ <div class=row><label data-i18n=srv.root>API root path</label><input id=sroot style=flex:1 placeholder="/webapi"></div>
+ <div class=row><label data-i18n=srv.code>Auth code</label><input id=scode style=flex:1></div>
+ <div class=row><button id=ssave data-i18n=srv.save>Save</button><button id=senroll data-i18n=srv.enroll>Connect (enroll)</button><span id=smsg class=mut></span></div>
+ <table>
+  <tr><td>MAC</td><td id=smac>--</td></tr>
+  <tr><td data-i18n=srv.token>Token</td><td id=stok>--</td></tr>
+  <tr><td data-i18n=srv.status>Status</td><td id=sstat>--</td></tr>
+ </table>
+ <div class=note data-i18n=srv.note>When enabled, each 1-min record (temp/humidity/pressure/lightning) is pushed to the SQL server. The token is derived from the MAC via HMAC on the server; enroll once.</div>
+</div>
+</section>
 </main>
 <script>
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -494,7 +540,11 @@ let LANG='en';
 try{if(localStorage.wlbLang)LANG=localStorage.wlbLang;}catch(e){}
 const I18N={en:{
  'nav.home':'Home','nav.chart':'Chart','nav.wifi':'WiFi','nav.calib':'Lightning calibration',
- 'nav.offset':'Temp/Humidity offset','nav.data':'Data / logging','nav.settings':'Settings',
+ 'nav.offset':'Temp/Humidity offset','nav.data':'Data / logging','nav.settings':'Settings','nav.server':'Server link',
+ 'srv.title':'Server link (SQL)','srv.enable':'Enable server mode (else standalone)','srv.base':'Base URL',
+ 'srv.root':'API root path','srv.code':'Auth code','srv.save':'Save','srv.enroll':'Connect (enroll)',
+ 'srv.token':'Token','srv.status':'Status',
+ 'srv.note':'When enabled, each 1-min record (temp/humidity/pressure/lightning) is pushed to the SQL server. The token is derived from the MAC via HMAC on the server; enroll once.',
  'login.title':'Login','login.user':'Username','login.pass':'Password','login.btn':'Log in',
  'dash.time':'Time (NTP)','dash.temp':'Temperature','dash.humi':'Humidity','dash.pres':'Pressure',
  'dash.risk':'Lightning risk','dash.last30':'Last 30 min','dash.strikes':'strikes','dash.dist':'disturbers',
@@ -537,10 +587,15 @@ const I18N={en:{
  'dyn.scanning':'Scanning...','dyn.scanfail':'Failed. Type the SSID directly.','dyn.apsfound':'found (click to select)',
  'dyn.calibrating':'Calibrating (~2s)...','dyn.exec':'Executed','dyn.busy':'Processing','dyn.fail':'Failed',
  'dyn.statclear':'Stats cleared','dyn.applied':'Applied','dyn.wifisaved':'Saved. Applies after reboot',
- 'dyn.times':'times','dyn.confirmclear':'Clear the log?','dyn.pwchanged':'Changed. Please log in again.'
+ 'dyn.times':'times','dyn.confirmclear':'Clear the log?','dyn.pwchanged':'Changed. Please log in again.',
+ 'dyn.enrolling':'Enrolling...'
 },ja:{
  'nav.home':'ホーム','nav.chart':'チャート','nav.wifi':'WiFi設定','nav.calib':'雷キャリブレーション',
- 'nav.offset':'温湿度オフセット','nav.data':'データ/測定頻度','nav.settings':'設定',
+ 'nav.offset':'温湿度オフセット','nav.data':'データ/測定頻度','nav.settings':'設定','nav.server':'サーバ連携',
+ 'srv.title':'サーバ連携 (SQL)','srv.enable':'サーバ対応を有効化 (OFF=スタンドアロン)','srv.base':'接続文字列(ベースURL)',
+ 'srv.root':'WebAPI ルートパス','srv.code':'認証コード','srv.save':'保存','srv.enroll':'接続(登録)',
+ 'srv.token':'トークン','srv.status':'状態',
+ 'srv.note':'有効時、分足1点(温度/湿度/気圧/雷)をSQLサーバへ送信します。トークンはサーバ側でMACからHMAC生成。初回のみ「接続(登録)」を実行してください。',
  'login.title':'ログイン','login.user':'ユーザー','login.pass':'パスワード','login.btn':'ログイン',
  'dash.time':'時刻(NTP)','dash.temp':'温度','dash.humi':'湿度','dash.pres':'気圧',
  'dash.risk':'雷 危険度','dash.last30':'直近30分','dash.strikes':'落雷','dash.dist':'妨害波',
@@ -583,7 +638,8 @@ const I18N={en:{
  'dyn.scanning':'スキャン中...','dyn.scanfail':'失敗。SSIDを直接入力してください','dyn.apsfound':'件 (クリックで選択)',
  'dyn.calibrating':'校正中(~2s)...','dyn.exec':'実行','dyn.busy':'処理中','dyn.fail':'失敗',
  'dyn.statclear':'統計クリア','dyn.applied':'適用','dyn.wifisaved':'保存。再起動で反映されます',
- 'dyn.times':'回','dyn.confirmclear':'ログを消去しますか?','dyn.pwchanged':'変更しました。再ログインしてください'
+ 'dyn.times':'回','dyn.confirmclear':'ログを消去しますか?','dyn.pwchanged':'変更しました。再ログインしてください',
+ 'dyn.enrolling':'登録中...'
 }};
 function t(k){const d=I18N[LANG]||I18N.en;return d[k]!=null?d[k]:(I18N.en[k]!=null?I18N.en[k]:k);}
 function applyLang(l){LANG=(I18N[l]?l:'en');try{localStorage.wlbLang=LANG}catch(e){}
@@ -610,7 +666,7 @@ function startPoll(){ const g=++pollGen;
 $$('#nav a').forEach(a=>a.onclick=()=>{page=+a.dataset.p;
  $$('#nav a').forEach(x=>x.classList.toggle('on',x===a));
  $$('main section').forEach((s,i)=>s.classList.toggle('on',i===page));
- openM(false); if(page===1)drawChart();});
+ openM(false); if(page===1)drawChart(); if(page===7)loadServer();});
 // API helpers (401でログイン表示)
 const gj=async u=>{const r=await fetch(u); if(r.status===401){showLogin();throw new Error('auth');} return r.json();};
 const post=async(u,o)=>{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
@@ -763,6 +819,21 @@ $('#absave').onclick=async()=>{$('#amsg').textContent='...';
  const r=await post('/api/passwd',{old:$('#aop').value,user:$('#au').value,'new':$('#anp').value}).catch(()=>({ok:0}));
  if(r&&r.ok){$('#amsg').textContent=t('dyn.pwchanged');$('#aop').value='';$('#anp').value='';$('#au').value='';setTimeout(showLogin,1200);}
  else{$('#amsg').textContent=(r&&r.err)||t('dyn.fail');}};
+// ---- P7 サーバ連携 ----
+async function loadServer(){try{const s=await gj('/api/server');
+ $('#sen').checked=!!s.enable;$('#sbase').value=s.base||'';$('#sroot').value=s.root||'';$('#scode').value=s.code||'';
+ $('#smac').textContent=s.mac||'--';$('#stok').textContent=s.hasToken?'✓':'--';$('#sstat').textContent=s.msg||'--';}catch(e){}}
+function srvArgs(){return {enable:$('#sen').checked?1:0,base:$('#sbase').value,root:$('#sroot').value,code:$('#scode').value};}
+$('#ssave').onclick=async()=>{const r=await post('/api/server',srvArgs()).catch(()=>({ok:0}));
+ $('#smsg').textContent=r&&r.ok?t('dyn.applied'):t('dyn.fail');if(r)$('#stok').textContent=r.hasToken?'✓':'--';};
+$('#senroll').onclick=async()=>{$('#smsg').textContent=t('dyn.enrolling');
+ const a=srvArgs();a.action='enroll';a.enable=1;$('#sen').checked=true;
+ await post('/api/server',a).catch(()=>{});
+ for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,2000));
+   const s=await gj('/api/server').catch(()=>null);
+   if(s){$('#stok').textContent=s.hasToken?'✓':'--';$('#sstat').textContent=s.msg||'';
+     if(s.hasToken){$('#smsg').textContent='OK';return;}}}
+ $('#smsg').textContent=t('dyn.fail')+' ('+($('#sstat').textContent||'')+')';};
 // ---- 言語切替 (設定ページ) ----
 $('#lang').onchange=()=>{applyLang($('#lang').value);};
 applyLang(LANG);   // 起動時に既定=英語(または保存言語)を適用
@@ -796,6 +867,7 @@ WLB_TRAMP(t_settings, handleSettings)  WLB_TRAMP(t_wscan,   handleWifiScan)
 WLB_TRAMP(t_wifi,     handleWifiSet)   WLB_TRAMP(t_calib,   handleCalib)
 WLB_TRAMP(t_offset,   handleOffset)    WLB_TRAMP(t_logcfg,  handleLogcfg)
 WLB_TRAMP(t_csv,      handleCsv)       WLB_TRAMP(t_logclear,handleLogClear)
+WLB_TRAMP(t_srvget,   handleServerGet) WLB_TRAMP(t_srvset,  handleServerSet)
 
 struct Route { const char* uri; httpd_method_t method; esp_err_t (*fn)(httpd_req_t*); };
 static const Route ROUTES[] = {
@@ -807,6 +879,7 @@ static const Route ROUTES[] = {
   {"/api/wifi",     HTTP_POST, t_wifi},     {"/api/calib",    HTTP_POST, t_calib},
   {"/api/offset",   HTTP_POST, t_offset},   {"/api/logcfg",   HTTP_POST, t_logcfg},
   {"/api/csv",      HTTP_GET,  t_csv},      {"/api/logclear", HTTP_POST, t_logclear},
+  {"/api/server",   HTTP_GET,  t_srvget},   {"/api/server",   HTTP_POST, t_srvset},
 };
 static void registerRoutes(httpd_handle_t h) {
   for (auto& rt : ROUTES) { httpd_uri_t u = {}; u.uri = rt.uri; u.method = rt.method; u.handler = rt.fn;

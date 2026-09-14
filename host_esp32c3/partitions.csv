@@ -1,11 +1,13 @@
 # WetherLoggerBox 4MB ESP32-C3: single app (no OTA) + large LittleFS + coredump
-# Sized from build result: app binary ~1.17MB -> factory 0x160000 (1.375MB, ~15% headroom).
-# A 1MB app is infeasible (binary exceeds it). FS maximized to 0x280000 (2.5MB) while
-# keeping a 64KB coredump for WDT/panic post-mortem. (app~1.4M / FS~2.5M)
-# Changing offsets reformats LittleFS on next boot (datalog_begin formats on mount-fail).
+# 2026-09-14: server-link (WiFiClientSecure/HTTPClient TLS client) grew the app past the
+#   old 0x160000 (1.44MB) limit (~1.45MB) -> would not boot. App enlarged to 0x1C0000
+#   (1.75MB, ~300KB headroom); LittleFS moved to 0x1D0000 / 0x220000 (2.125MB).
+# NOTE: offsets changed -> LittleFS reformats on next boot (saved WiFi/logs/token lost;
+#   WiFi falls back to config.local.h defaults, calibration/token are re-acquired).
+# ASCII only: PlatformIO parses this file as the system ANSI codepage (cp932 on JP Windows).
 # Name,     Type, SubType,  Offset,   Size
 nvs,        data, nvs,      0x9000,   0x5000,
 phy_init,   data, phy,      0xe000,   0x1000,
-factory,    app,  factory,  0x10000,  0x160000,
-spiffs,     data, spiffs,   0x170000, 0x280000,
+factory,    app,  factory,  0x10000,  0x1C0000,
+spiffs,     data, spiffs,   0x1D0000, 0x220000,
 coredump,   data, coredump, 0x3F0000, 0x10000,

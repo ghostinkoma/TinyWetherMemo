@@ -16,6 +16,12 @@
 #include "datalog.h"
 #include "histfs.h"
 #include "auth.h"
+#include "server_sync.h"
+
+// ★loopTask のスタックを拡大。サーバ連携の TLS(HTTPS)クライアント(mbedTLS)を
+//   loopTask で実行するため、既定8KBでは handshake 中にスタックオーバーフロー→
+//   クラッシュ/再起動ループになる(オンデバイスHTTPSサーバを10KBにしているのと同理由)。
+SET_LOOP_TASK_STACK_SIZE(24 * 1024);
 
 WifiSession  net;
 WlbSettings  g_settings;
@@ -79,6 +85,7 @@ void setup() {
     startApMode();                                          // AP 単独 (STA は起動しない)
   }
 
+  srv::begin(&g_settings);   // SQLサーバ連携 (スタンドアロン時は通信しない)
   webui_begin(g_settings);   // Web(:80) + mDNS(settings.mdns)
 }
 
@@ -107,6 +114,17 @@ void loop() {
   ns.rssi = (int8_t)net.rssi(); ns.timeValid = net.timeValid();
   g_state.setNet(ns);
 
+  // サーバ対応かつ未登録なら、接続後に自動 enroll (UI操作なしで実測値を流し始める)。
+  static uint32_t lastEnroll = 0;
+  if (srv::enabled() && !srv::hasToken() && net.isConnected() &&
+      (lastEnroll == 0 || (uint32_t)(now - lastEnroll) > 30000)) {
+    lastEnroll = now;
+    String e; srv::enroll(e);
+#if WLB_ENABLE_WDT
+    esp_task_wdt_reset();
+#endif
+  }
+
   if (net.timeValid() && now - lastTimePush >= 60000) {
     lastTimePush = now; g_state.requestTimeSync(net.epoch());
   }
@@ -130,6 +148,13 @@ void loop() {
       HistSample ls = tail[n-1];                       // 最新の分足レコード
       datalog_append(ls.epoch, wlbDec2(ls.t), wlbDec2(ls.h), ls.danger);   // CSV(全期間, 日別リング)
       if (ls.epoch > 1700000000UL) histfs_append(ls);  // 分足バイナリ(絶対epochのみ, チャート用)
+      // サーバ対応時: 同じ分足1点を SQLサーバへ PUSH (未接続/時刻未確定/未登録は内部でスキップ)。
+      if (srv::enabled() && srv::hasToken() && net.isConnected()) {
+        srv::push(ls);
+#if WLB_ENABLE_WDT
+        esp_task_wdt_reset();                           // TLS 送信での遅延を吸収
+#endif
+      }
     }
   }
 

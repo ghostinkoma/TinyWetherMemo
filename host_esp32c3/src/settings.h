@@ -22,6 +22,13 @@ struct WlbSettings {
   uint8_t  avgN          = 12;      // FS集計サンプル数 (period×n=60s ごとに分足1レコード)
   uint8_t  dropMinMax    = 1;       // 最小最大を捨てる (その場合 n>=4)
 
+  // サーバ連携 (SQLサーバへ PUSH)。既定は config.h/config.local.h。詳細は server/README.md
+  uint8_t  srvEnable = WLB_SRV_ENABLE;    // 0=スタンドアロン / 1=サーバ対応
+  char     srvBase[96]  = WLB_SRV_BASE;   // 接続文字列(ベースURL) 例 https://your-domain.example
+  char     srvRoot[48]  = WLB_SRV_ROOT;   // 端末用WebAPIルート (人間UI /api とURL分離)
+  char     srvCode[64]  = WLB_SRV_CODE;   // 認証コード (サーバ enroll_code)
+  char     srvToken[72] = "";             // enroll で取得したトークン(hex64)。空=未登録
+
   // AS3935
   uint8_t  asIndoor     = 1;        // 1=室内 / 0=室外
   uint8_t  asNoiseFloor = 2;        // NF_LEV 0..7

@@ -1,0 +1,32 @@
+# ============================================================================
+#  server/.htaccess  (= ドメイン公開フォルダ = ~/wether 直下 に置かれる想定)
+# ----------------------------------------------------------------------------
+#  目的: ドキュメントルートを変えずに https://your-domain.example/ を
+#        public/ 配下として振る舞わせる。
+#          /                → public/index.php  (ログイン画面)
+#          /api/session.py  → public/api/session.py
+#          /webapi/enroll.py→ public/webapi/enroll.py
+#        ※ /config.local.py 等は public/ に無い→404 となり実ファイルは露出しない。
+#        ★推奨は「公開フォルダ自体を wether/public に設定」すること(この.htaccess不要に
+#          なり最も安全)。本リライトはコンパネ変更なしで動かすための保険。
+# ============================================================================
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # ルートアクセスはログイン画面へ
+  RewriteRule ^$ public/index.php [L]
+  # 既に /public/ で来たものは二重付与しない (後方互換)
+  RewriteCond %{REQUEST_URI} !^/public/
+  # それ以外はすべて public/ 配下へ内部リライト
+  RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# 保険: 設定ファイルの直接アクセス拒否 (public/ の外にある実ファイル)
+<FilesMatch "^config\.(local|example)\.(py|php)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>

@@ -1,0 +1,8 @@
+# tools/ : 直接Webアクセス禁止 (CLI 専用スクリプト)
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

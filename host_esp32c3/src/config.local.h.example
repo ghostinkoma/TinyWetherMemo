@@ -12,3 +12,10 @@
 
 // 設定用 SoftAP のパスワード (WPA2, 8文字以上)。任意で上書き。
 // #define WLB_AP_PASS    "your-ap-pass"
+
+// ---- SQLサーバ連携 (任意)。ここに書けば書込だけで自動 enroll → 分足 PUSH が始まる ----
+//  認証コードは秘密。config.local.h は gitignore 済みなので実値を書いてよい。
+// #define WLB_SRV_ENABLE 1
+// #define WLB_SRV_BASE   "https://your-domain.example"
+// #define WLB_SRV_ROOT   "/webapi"
+// #define WLB_SRV_CODE   "your-enroll-code"

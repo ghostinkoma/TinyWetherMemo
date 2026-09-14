@@ -33,3 +33,15 @@ host_esp32c3/src/cert_pem.h
 **/settings.ini
 # 引き継ぎメモ (実IP/MAC/COM/既定資格情報など運用機密を含む=公開しない)
 /DISPATCH.md
+
+# --- server (ロリポップ SQL 連携): 実 DB 資格情報 / 秘密鍵 / 認証コードは公開しない ---
+# テンプレ config.example.py のみ追跡する
+server/config.local.py
+server/config.local.php
+server/**/*.local.py
+server/**/*.local.php
+# Python venv / キャッシュ
+server/venv/
+server/.venv/
+**/__pycache__/
+*.pyc
