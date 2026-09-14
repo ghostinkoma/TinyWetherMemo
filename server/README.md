@@ -1,7 +1,7 @@
-# WetherLoggerBox — サーバ連携 (ロリポップ ビジネス / MySQL)
+# WetherLoggerBox — サーバ連携 (PHP/Python/MySQLが利用可能な標準的なレンタルサーバー)
 
-ESP32-C3 ロガー（WetherLoggerBox）の測定を、ロリポップ上の MySQL へ送って蓄積・閲覧するための **サーバ側一式**。デバイスはスタンドアロン（LittleFS ローカル記録）と **サーバ対応** を切替可能（デバイス側UIは別フェーズ）。
-
+ESP32-C3 ロガー（WetherLoggerBox）の測定を、レンタルサーバー上の MySQL へ送って蓄積・閲覧するための **サーバ側一式**。デバイスはスタンドアロン（LittleFS ローカル記録）と **サーバ対応** を切替可能（デバイス側UIは別フェーズ）。
+※サーバーはロリポップを利用した例
 ## アーキテクチャ（役割分担）
 - **PHP = UI に専念**：`public/index.php` がログイン画面とダッシュボードの **HTML/CSS/JS を配信するだけ**。DB も秘密情報も持たない。
 - **Python = ロジック層**：`logic/` ＋ CGI エンドポイント `public/api/*.py` が **DB アクセス・認証・バージョン管理・トークン** を担う。
