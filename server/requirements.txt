@@ -1,0 +1,5 @@
+# WetherLoggerBox サーバ (Python ロジック層) 依存
+# PyMySQL は純Python。cryptography はMySQL8(caching_sha2_password/sha256_password)
+# のRSA認証に必須 (通常はプレビルドwheelが入る=ビルド不要)。
+PyMySQL>=1.1.0
+cryptography
